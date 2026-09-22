@@ -1,0 +1,395 @@
+{
+  "spec": {
+    "eip8347": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-8347.md@2026-08-25",
+    "eip8297": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-8297.md@2026-09-21",
+    "hasher": "blake3",
+    "generator": "simulators/ethereum/pbt-artifacts/fixtures/gen"
+  },
+  "genesis": {
+    "file": "genesis.json",
+    "stateRoot": "0xad8300c4290e436a8ec4f06d02cb3e10ca3349e3e01e9588caad4e78485c7b12",
+    "pbtRoot": "0x26641cbfac49798d32ac2980d92c0961335df53ec3f5c86b43e5e65574e27dc3",
+    "accounts": 21
+  },
+  "valid": {
+    "snapshot": "valid/snapshot.bin",
+    "preimages": "valid/preimages.bin",
+    "snapshotDigest": "0xd146f37a74366f8205363473c0353359edc631854d27f881f0d2c42cc62efa3c",
+    "preimageDigest": "0x3ca06762a3797436762c8aece0d271d7a53e39be7dcd84dc3606792e94b793fa",
+    "snapshotSha256": "0x2941cab6e981fc0122306ac750478cb9e2f5574a6eff4117db01540b3a112724",
+    "preimageSha256": "0xde7edff58dcafcad269374f2dad46a6f3bc666629382329f86be087479474b13",
+    "leafCount": 328,
+    "records": 21
+  },
+  "cases": [
+    {
+      "id": "preimages/trailing-byte",
+      "suite": "preimages",
+      "snapshot": "valid/snapshot.bin",
+      "preimages": "preimages/trailing-byte/preimages.bin",
+      "expect": "reject",
+      "clause": "preimage.no-trailing-bytes",
+      "note": "the file ends after the final record; any trailing byte makes it invalid"
+    },
+    {
+      "id": "preimages/truncated-record",
+      "suite": "preimages",
+      "snapshot": "valid/snapshot.bin",
+      "preimages": "preimages/truncated-record/preimages.bin",
+      "expect": "reject",
+      "clause": "preimage.record-self-delimiting",
+      "note": "the last record's final slot key is cut short"
+    },
+    {
+      "id": "preimages/slot-count-overclaim",
+      "suite": "preimages",
+      "snapshot": "valid/snapshot.bin",
+      "preimages": "preimages/slot-count-overclaim/preimages.bin",
+      "expect": "reject",
+      "clause": "preimage.record-self-delimiting",
+      "note": "the first record claims more slots than the file can hold"
+    },
+    {
+      "id": "preimages/raw-address-order",
+      "suite": "preimages",
+      "snapshot": "valid/snapshot.bin",
+      "preimages": "preimages/raw-address-order/preimages.bin",
+      "expect": "reject",
+      "clause": "preimage.hashed-key-order",
+      "note": "records sorted by raw address rather than by keccak256(address)"
+    },
+    {
+      "id": "preimages/raw-slot-order",
+      "suite": "preimages",
+      "snapshot": "valid/snapshot.bin",
+      "preimages": "preimages/raw-slot-order/preimages.bin",
+      "expect": "reject",
+      "clause": "preimage.hashed-key-order",
+      "note": "slot keys sorted by slot number rather than by keccak256(slotKey)"
+    },
+    {
+      "id": "preimages/duplicate-address",
+      "suite": "preimages",
+      "snapshot": "valid/snapshot.bin",
+      "preimages": "preimages/duplicate-address/preimages.bin",
+      "expect": "reject",
+      "clause": "preimage.address-appears-once",
+      "note": "one account carries two records"
+    },
+    {
+      "id": "preimages/duplicate-slot",
+      "suite": "preimages",
+      "snapshot": "valid/snapshot.bin",
+      "preimages": "preimages/duplicate-slot/preimages.bin",
+      "expect": "reject",
+      "clause": "preimage.no-duplicate-slots",
+      "note": "a storage-holding account names one slot twice"
+    },
+    {
+      "id": "preimages/missing-account",
+      "suite": "preimages",
+      "snapshot": "valid/snapshot.bin",
+      "preimages": "preimages/missing-account/preimages.bin",
+      "expect": "reject",
+      "clause": "converter.preimage-set-matches-leaves",
+      "note": "an account the snapshot carries has no preimage record"
+    },
+    {
+      "id": "preimages/surplus-account",
+      "suite": "preimages",
+      "snapshot": "valid/snapshot.bin",
+      "preimages": "preimages/surplus-account/preimages.bin",
+      "expect": "reject",
+      "clause": "converter.preimage-set-matches-leaves",
+      "note": "a preimage record names an account the state does not hold"
+    },
+    {
+      "id": "preimages/missing-header-slot",
+      "suite": "preimages",
+      "snapshot": "valid/snapshot.bin",
+      "preimages": "preimages/missing-header-slot/preimages.bin",
+      "expect": "reject",
+      "clause": "converter.preimage-set-matches-leaves",
+      "note": "a header-range slot the state holds is absent from the file"
+    },
+    {
+      "id": "preimages/surplus-header-slot",
+      "suite": "preimages",
+      "snapshot": "valid/snapshot.bin",
+      "preimages": "preimages/surplus-header-slot/preimages.bin",
+      "expect": "reject",
+      "clause": "converter.preimage-set-matches-leaves",
+      "note": "the file names a header-range slot the state does not hold"
+    },
+    {
+      "id": "preimages/missing-overflow-slot",
+      "suite": "preimages",
+      "snapshot": "valid/snapshot.bin",
+      "preimages": "preimages/missing-overflow-slot/preimages.bin",
+      "expect": "reject",
+      "clause": "converter.preimage-set-matches-leaves",
+      "note": "an overflow slot the state holds is absent, so its leaf can never be keyed"
+    },
+    {
+      "id": "preimages/empty-file",
+      "suite": "preimages",
+      "snapshot": "valid/snapshot.bin",
+      "preimages": "preimages/empty-file/preimages.bin",
+      "expect": "reject",
+      "clause": "converter.preimage-set-matches-leaves",
+      "note": "no preimages at all against a populated snapshot"
+    },
+    {
+      "id": "snapshot/wrong-claimed-root",
+      "suite": "snapshot",
+      "snapshot": "snapshot/wrong-claimed-root/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "snapshot.root-recomputed",
+      "note": "the header claims a root the leaves do not fold to"
+    },
+    {
+      "id": "snapshot/leaf-count-high",
+      "suite": "snapshot",
+      "snapshot": "snapshot/leaf-count-high/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "snapshot.leaf-count-recomputed",
+      "note": "the header claims one leaf more than the file carries"
+    },
+    {
+      "id": "snapshot/leaf-count-low",
+      "suite": "snapshot",
+      "snapshot": "snapshot/leaf-count-low/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "snapshot.leaf-count-recomputed",
+      "note": "the header claims one leaf fewer than the file carries"
+    },
+    {
+      "id": "snapshot/truncated-stream",
+      "suite": "snapshot",
+      "snapshot": "snapshot/truncated-stream/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "snapshot.record-self-delimiting",
+      "note": "the final record is cut short"
+    },
+    {
+      "id": "snapshot/trailing-garbage",
+      "suite": "snapshot",
+      "snapshot": "snapshot/trailing-garbage/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "snapshot.leaf-count-recomputed",
+      "note": "bytes follow the last record the header accounts for"
+    },
+    {
+      "id": "snapshot/records-out-of-order",
+      "suite": "snapshot",
+      "snapshot": "snapshot/records-out-of-order/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "snapshot.ascending-key-order",
+      "note": "two adjacent records are swapped, so the stream is not ascending"
+    },
+    {
+      "id": "snapshot/duplicate-key",
+      "suite": "snapshot",
+      "snapshot": "snapshot/duplicate-key/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "snapshot.ascending-key-order",
+      "note": "one key appears twice, which ascending order forbids"
+    },
+    {
+      "id": "snapshot/reserved-zone",
+      "suite": "snapshot",
+      "snapshot": "snapshot/reserved-zone/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "snapshot.zone-byte",
+      "note": "a key sits in the reserved 0x02-0xFE zone range"
+    },
+    {
+      "id": "snapshot/wrong-key-length",
+      "suite": "snapshot",
+      "snapshot": "snapshot/wrong-key-length/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "snapshot.zone-fixes-key-length",
+      "note": "an account-zone key carries a storage-zone key length"
+    },
+    {
+      "id": "snapshot/zero-value-present",
+      "suite": "snapshot",
+      "snapshot": "snapshot/zero-value-present/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "snapshot.no-zero-values",
+      "note": "a leaf holds 32 zero bytes, which EIP-8297 requires to be absent"
+    },
+    {
+      "id": "snapshot/non-canonical-value",
+      "suite": "snapshot",
+      "snapshot": "snapshot/non-canonical-value/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "snapshot.canonical-integer-value",
+      "note": "a value is encoded with a leading zero byte"
+    },
+    {
+      "id": "snapshot/flipped-value-root-kept",
+      "suite": "snapshot",
+      "snapshot": "snapshot/flipped-value-root-kept/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "verification.internal-consistency",
+      "note": "a leaf value is altered and the claimed root left alone, so the rebuild disagrees"
+    },
+    {
+      "id": "snapshot/flipped-value-root-recomputed",
+      "suite": "snapshot",
+      "snapshot": "snapshot/flipped-value-root-recomputed/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "verification.consensus-anchoring",
+      "note": "a balance is altered and the root recomputed, so only the MPT re-hash catches it"
+    },
+    {
+      "id": "snapshot/nonzero-version",
+      "suite": "snapshot",
+      "snapshot": "snapshot/nonzero-version/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "embedding.version-zero",
+      "note": "a basic-data leaf carries a non-zero version byte"
+    },
+    {
+      "id": "snapshot/basic-data-reserved-garbage",
+      "suite": "snapshot",
+      "snapshot": "snapshot/basic-data-reserved-garbage/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "embedding.basic-data-layout",
+      "note": "the three reserved bytes of a basic-data leaf are not zero"
+    },
+    {
+      "id": "snapshot/wrong-code-size",
+      "suite": "snapshot",
+      "snapshot": "snapshot/wrong-code-size/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "verification.code-limb",
+      "note": "a contract's code_size disagrees with the chunks its code hash covers"
+    },
+    {
+      "id": "snapshot/missing-code-chunk",
+      "suite": "snapshot",
+      "snapshot": "snapshot/missing-code-chunk/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "verification.code-limb",
+      "note": "one code leaf is dropped, so the reassembled code does not hash to its code hash"
+    },
+    {
+      "id": "snapshot/flipped-pushdata-byte",
+      "suite": "snapshot",
+      "snapshot": "snapshot/flipped-pushdata-byte/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "verification.code-limb",
+      "note": "a code chunk's leading-PUSHDATA count is wrong while its code bytes are intact"
+    },
+    {
+      "id": "snapshot/orphan-code-leaves",
+      "suite": "snapshot",
+      "snapshot": "snapshot/orphan-code-leaves/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "verification.code-limb",
+      "note": "code leaves under a code hash no account holds"
+    },
+    {
+      "id": "snapshot/delegation-and-code-hash",
+      "suite": "snapshot",
+      "snapshot": "snapshot/delegation-and-code-hash/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "embedding.one-of-codehash-or-delegation",
+      "note": "a delegated account also carries a code-hash leaf"
+    },
+    {
+      "id": "snapshot/delegation-wrong-code-size",
+      "suite": "snapshot",
+      "snapshot": "snapshot/delegation-wrong-code-size/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "embedding.delegation-code-size-23",
+      "note": "a delegated account's code_size is not 23"
+    },
+    {
+      "id": "snapshot/delegation-padding-garbage",
+      "suite": "snapshot",
+      "snapshot": "snapshot/delegation-padding-garbage/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "embedding.delegation-leaf-layout",
+      "note": "the nine bytes after a delegation designator are not zero"
+    },
+    {
+      "id": "snapshot/header-slot-in-storage-zone",
+      "suite": "snapshot",
+      "snapshot": "snapshot/header-slot-in-storage-zone/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "embedding.header-holds-slots-0-63",
+      "note": "a slot below 64 is keyed in the storage zone instead of the header stem"
+    },
+    {
+      "id": "snapshot/anchored-elsewhere",
+      "suite": "snapshot",
+      "snapshot": "snapshot/anchored-elsewhere/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "verification.consensus-anchoring",
+      "note": "an internally consistent snapshot of a different state, which only the anchor check refuses"
+    },
+    {
+      "id": "snapshot/empty",
+      "suite": "snapshot",
+      "snapshot": "snapshot/empty/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "unspecified",
+      "clause": "unspecified.empty-snapshot",
+      "note": "leafCount 0: the reference converter refuses it, the EIP does not say"
+    },
+    {
+      "id": "snapshot/reserved-header-subindex",
+      "suite": "snapshot",
+      "snapshot": "snapshot/reserved-header-subindex/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "unspecified",
+      "clause": "unspecified.header-subindex-gap",
+      "note": "a leaf at header sub-index 3, in the gap between delegation and storage"
+    },
+    {
+      "id": "snapshot/codeless-account-without-code-hash",
+      "suite": "snapshot",
+      "snapshot": "snapshot/codeless-account-without-code-hash/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "unspecified",
+      "clause": "unspecified.codehash-leaf-required",
+      "note": "an account with no code drops its code-hash leaf, which a verifier may infer"
+    },
+    {
+      "id": "preimages/storage-less-record-absent",
+      "suite": "preimages",
+      "snapshot": "valid/snapshot.bin",
+      "preimages": "preimages/storage-less-record-absent/preimages.bin",
+      "expect": "unspecified",
+      "clause": "unspecified.slotcount-zero-record",
+      "note": "an account with no storage is left out of the file entirely"
+    }
+  ]
+}
