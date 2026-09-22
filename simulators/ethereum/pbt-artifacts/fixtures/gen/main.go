@@ -1,13 +1,8 @@
-// Command gen regenerates the checked-in EIP-8347 artifact fixtures.
+// Command gen regenerates the checked-in fixtures: the anchor genesis, the
+// valid artifacts from the reference converter, and one file per way an
+// artifact can lie.
 //
-// It writes the anchor genesis, produces the valid artifacts by running the
-// reference converter over it, then derives one file per way an artifact can
-// lie. The result is a manifest naming every case and its expected outcome,
-// which the simulator reads; the simulator itself never runs this code.
-//
-// Usage:
-//
-//	go run . -geth /path/to/geth -out ../
+//	go run . -geth /path/to/geth -out ..
 package main
 
 import (
@@ -65,8 +60,7 @@ func run(gethBin, outDir string) error {
 	return writeManifest(outDir, genesisPath, valid, cases)
 }
 
-// artifacts is the valid pair, decoded, so mutations work on records rather
-// than on bytes.
+// artifacts is the valid pair, decoded.
 type artifacts struct {
 	root       common.Hash
 	stateRoot  common.Hash
@@ -86,9 +80,8 @@ type record struct {
 	slots []common.Hash
 }
 
-// convert initialises a throwaway datadir from the genesis and runs the
-// reference converter over it, then decodes what it produced and holds its
-// preimage file to the one the allocation implies.
+// convert runs the reference converter over the genesis and holds its output
+// to what the allocation implies.
 func convert(gethBin, genesisPath, outDir string, alloc types.GenesisAlloc) (*artifacts, error) {
 	datadir, err := os.MkdirTemp("", "pbt-fixtures-")
 	if err != nil {
@@ -96,8 +89,6 @@ func convert(gethBin, genesisPath, outDir string, alloc types.GenesisAlloc) (*ar
 	}
 	defer os.RemoveAll(datadir)
 
-	// The converter reads the plain keys behind the trie paths, so the state
-	// has to be written with the preimage store on.
 	if out, err := exec.Command(gethBin, "--datadir", datadir, "--cache.preimages", "init", genesisPath).CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("geth init: %w\n%s", err, out)
 	}
@@ -127,12 +118,6 @@ func convert(gethBin, genesisPath, outDir string, alloc types.GenesisAlloc) (*ar
 	if err != nil {
 		return nil, err
 	}
-	// The preimage file is derivable from the allocation alone: the EIP fixes
-	// the framing and the order, and the allocation names every address and
-	// slot key. So it is derived here rather than taken from the converter,
-	// and the converter is held to it. That keeps the canonical bytes
-	// independent of any client, which matters because these bytes are what
-	// every client is then measured against.
 	want := derivePreimages(alloc)
 	if !bytes.Equal(preBlob, want) {
 		return nil, fmt.Errorf("the converter's preimage file disagrees with the layout the state implies:\nconverter %x\nderived   %x", preBlob, want)
@@ -145,10 +130,11 @@ func convert(gethBin, genesisPath, outDir string, alloc types.GenesisAlloc) (*ar
 	if err != nil {
 		return nil, fmt.Errorf("the derived preimage file does not decode: %w", err)
 	}
-	// The root the converter claims must be the root its leaves fold to: the
-	// fixtures are worthless if the pair disagrees before a mutation.
 	if got := foldRoot(leaves); got != root {
 		return nil, fmt.Errorf("valid snapshot claims root %x, its leaves fold to %x", root, got)
+	}
+	if err := checkLeaves(leaves, deriveLeaves(alloc)); err != nil {
+		return nil, fmt.Errorf("converter disagrees with the embedding rules: %w", err)
 	}
 	return &artifacts{
 		root: root, stateRoot: stateRoot, leaves: leaves, records: records,
@@ -156,8 +142,6 @@ func convert(gethBin, genesisPath, outDir string, alloc types.GenesisAlloc) (*ar
 	}, nil
 }
 
-// genesisStateRoot derives the anchor header's state root from the genesis
-// file itself, which is what a consumer checks the re-hashed leaves against.
 func genesisStateRoot(genesisPath string) (common.Hash, error) {
 	blob, err := os.ReadFile(genesisPath)
 	if err != nil {
@@ -180,20 +164,21 @@ func foldRoot(leaves []leaf) common.Hash {
 	return b.Finish()
 }
 
-// mutation is one way an artifact can lie.
+// mutation is one way an artifact can lie. One hook shapes the case; a leaf
+// hook may also reshape the records.
 type mutation struct {
 	id     string
-	suite  string // "preimages" or "snapshot"
-	clause string // the rule the file breaks
-	expect string // "reject" or "unspecified"
+	suite  string
+	clause string
+	expect string
 	note   string
 
-	// Exactly one of these shapes the case.
-	snapshot  func([]leaf) []leaf     // mutate the leaf set, header recomputed unless keepRoot
-	preimages func([]record) []record // mutate the preimage set
-	rawSnap   func([]byte) []byte     // mutate the encoded snapshot bytes
-	rawPre    func([]byte) []byte     // mutate the encoded preimage bytes
-	keepRoot  bool                    // keep the valid root in the header
+	leaves   func([]leaf) []leaf
+	records  func([]record) []record
+	rawSnap  func([]byte) []byte
+	rawPre   func([]byte) []byte
+	keepRoot bool // keep the valid root in the header, so check 1 catches it
+	verbatim bool // write records in the order given, not keccak order
 }
 
 func writeCases(outDir string, valid *artifacts) ([]caseEntry, error) {
@@ -207,76 +192,66 @@ func writeCases(outDir string, valid *artifacts) ([]caseEntry, error) {
 			ID: m.id, Suite: m.suite, Clause: m.clause, Expect: m.expect, Note: m.note,
 			Snapshot: "valid/snapshot.bin", Preimages: "valid/preimages.bin",
 		}
+		var snap, pre []byte // nil means untouched; empty means an empty file
 		switch {
-		case m.snapshot != nil:
-			leaves := m.snapshot(cloneLeaves(valid.leaves))
+		case m.leaves != nil:
+			leaves := m.leaves(cloneLeaves(valid.leaves))
 			root := valid.root
 			if !m.keepRoot {
 				root = foldRoot(leaves)
 			}
-			path := filepath.Join(dir, "snapshot.bin")
-			if err := os.WriteFile(path, encodeSnapshot(root, uint64(len(leaves)), leaves), 0644); err != nil {
-				return nil, err
+			snap = encodeSnapshot(root, uint64(len(leaves)), leaves)
+			if m.records != nil {
+				pre = encodePreimages(m.records(cloneRecords(valid.records)))
 			}
-			entry.Snapshot = rel(outDir, path)
-		case m.preimages != nil:
-			path := filepath.Join(dir, "preimages.bin")
-			if err := os.WriteFile(path, encodePreimages(m.preimages(cloneRecords(valid.records))), 0644); err != nil {
-				return nil, err
+		case m.records != nil:
+			recs := m.records(cloneRecords(valid.records))
+			if m.verbatim {
+				pre = encodeRecordsVerbatim(recs)
+			} else {
+				pre = encodePreimages(recs)
 			}
-			entry.Preimages = rel(outDir, path)
 		case m.rawSnap != nil:
-			blob, err := os.ReadFile(valid.snapshotFD)
-			if err != nil {
-				return nil, err
-			}
-			path := filepath.Join(dir, "snapshot.bin")
-			if err := os.WriteFile(path, m.rawSnap(blob), 0644); err != nil {
-				return nil, err
-			}
-			entry.Snapshot = rel(outDir, path)
+			snap = m.rawSnap(mustRead(valid.snapshotFD))
 		case m.rawPre != nil:
-			blob, err := os.ReadFile(valid.preimageFD)
-			if err != nil {
-				return nil, err
-			}
-			path := filepath.Join(dir, "preimages.bin")
-			if err := os.WriteFile(path, m.rawPre(blob), 0644); err != nil {
-				return nil, err
-			}
-			entry.Preimages = rel(outDir, path)
+			pre = m.rawPre(mustRead(valid.preimageFD))
 		default:
 			return nil, fmt.Errorf("case %s shapes nothing", m.id)
 		}
-		// A mutation that changed nothing would be scored as a client bug.
-		same, err := identical(outDir, entry, valid)
-		if err != nil {
-			return nil, err
+		changed := false
+		for _, f := range []struct {
+			blob  []byte
+			valid string
+			name  string
+			field *string
+		}{
+			{snap, valid.snapshotFD, "snapshot.bin", &entry.Snapshot},
+			{pre, valid.preimageFD, "preimages.bin", &entry.Preimages},
+		} {
+			if f.blob == nil {
+				continue
+			}
+			path := filepath.Join(dir, f.name)
+			if err := os.WriteFile(path, f.blob, 0644); err != nil {
+				return nil, err
+			}
+			*f.field = rel(outDir, path)
+			changed = changed || !bytes.Equal(f.blob, mustRead(f.valid))
 		}
-		if same {
-			return nil, fmt.Errorf("case %s produced the valid file unchanged", m.id)
+		if !changed {
+			return nil, fmt.Errorf("case %s produced the valid files unchanged", m.id)
 		}
 		entries = append(entries, entry)
 	}
 	return entries, nil
 }
 
-func identical(outDir string, entry caseEntry, valid *artifacts) (bool, error) {
-	var mutated, original string
-	if entry.Snapshot != "valid/snapshot.bin" {
-		mutated, original = filepath.Join(outDir, entry.Snapshot), valid.snapshotFD
-	} else {
-		mutated, original = filepath.Join(outDir, entry.Preimages), valid.preimageFD
-	}
-	a, err := os.ReadFile(mutated)
+func mustRead(path string) []byte {
+	blob, err := os.ReadFile(path)
 	if err != nil {
-		return false, err
+		panic(err)
 	}
-	b, err := os.ReadFile(original)
-	if err != nil {
-		return false, err
-	}
-	return bytes.Equal(a, b), nil
+	return blob
 }
 
 func rel(outDir, path string) string {
@@ -380,8 +355,6 @@ func sha256sum(b []byte) []byte {
 	return sum[:]
 }
 
-// encodeSnapshot lays out the artifact: the claimed root, the leaf count, and
-// one RLP [key, value] per leaf with the value as a canonical integer.
 func encodeSnapshot(root common.Hash, count uint64, leaves []leaf) []byte {
 	var buf bytes.Buffer
 	buf.Write(root[:])
@@ -392,8 +365,20 @@ func encodeSnapshot(root common.Hash, count uint64, leaves []leaf) []byte {
 	return buf.Bytes()
 }
 
-// encodePreimages lays out the preimage file: fixed-width records, in the
-// order the EIP demands, which is over the hashed keys.
+// encodeRecordsVerbatim writes records in the order given.
+func encodeRecordsVerbatim(recs []record) []byte {
+	var buf bytes.Buffer
+	for _, r := range recs {
+		buf.Write(r.addr[:])
+		buf.Write(binary.BigEndian.AppendUint32(nil, uint32(len(r.slots))))
+		for _, s := range r.slots {
+			buf.Write(s[:])
+		}
+	}
+	return buf.Bytes()
+}
+
+// encodePreimages writes records in keccak order.
 func encodePreimages(recs []record) []byte {
 	byHash := func(a, b []byte) int { return bytes.Compare(crypto.Keccak256(a), crypto.Keccak256(b)) }
 	slices.SortStableFunc(recs, func(a, b record) int { return byHash(a.addr[:], b.addr[:]) })

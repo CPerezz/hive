@@ -15,9 +15,7 @@ const (
 	preimageRecordHeaderSize = common.AddressLength + 4
 )
 
-// encodeLeaf is one snapshot record: RLP of the full key and the value as a
-// canonical integer, which is the 32-byte value with its leading zero bytes
-// removed.
+// encodeLeaf is RLP([key, value]) with the value as a canonical integer.
 func encodeLeaf(l leaf) []byte {
 	blob, err := rlp.EncodeToBytes([]any{l.key, common.TrimLeftZeroes(l.value[:])})
 	if err != nil {
@@ -26,8 +24,6 @@ func encodeLeaf(l leaf) []byte {
 	return blob
 }
 
-// mustRLP encodes one record verbatim, so a case can hand the encoder bytes
-// the writers would never produce.
 func mustRLP(key, value []byte) []byte {
 	blob, err := rlp.EncodeToBytes([]any{key, value})
 	if err != nil {
@@ -36,9 +32,30 @@ func mustRLP(key, value []byte) []byte {
 	return blob
 }
 
-// decodeSnapshot reads the artifact back into records, enforcing only what it
-// needs to hand mutations a faithful copy; the rules themselves are what the
-// clients under test are being measured against.
+// mustRLP1 is a one-item list where a record should be a pair.
+func mustRLP1(key []byte) []byte {
+	blob, err := rlp.EncodeToBytes([]any{key})
+	if err != nil {
+		panic(err)
+	}
+	return blob
+}
+
+// longFormPair is a valid pair with the value's length written in the long
+// form (0xb8 n) that RLP reserves for strings of 56 bytes or more.
+func longFormPair(key, value []byte) []byte {
+	item := append([]byte{0xb8, byte(len(value))}, value...)
+	keyEnc, err := rlp.EncodeToBytes(key)
+	if err != nil {
+		panic(err)
+	}
+	body := append(keyEnc, item...)
+	if len(body) < 56 {
+		return append([]byte{0xc0 + byte(len(body))}, body...)
+	}
+	return append([]byte{0xf8, byte(len(body))}, body...)
+}
+
 func decodeSnapshot(blob []byte) (common.Hash, []leaf, error) {
 	if len(blob) < snapshotHeaderSize {
 		return common.Hash{}, nil, fmt.Errorf("snapshot is %d bytes, shorter than its header", len(blob))
@@ -68,7 +85,6 @@ func decodeSnapshot(blob []byte) (common.Hash, []leaf, error) {
 	return root, leaves, nil
 }
 
-// decodePreimages reads the preimage file back into records.
 func decodePreimages(blob []byte) ([]record, error) {
 	var recs []record
 	for len(blob) > 0 {
@@ -91,7 +107,6 @@ func decodePreimages(blob []byte) ([]record, error) {
 	return recs, nil
 }
 
-// findKey returns the index of the leaf with the given key.
 func findKey(leaves []leaf, key []byte) int {
 	for i, l := range leaves {
 		if bytes.Equal(l.key, key) {
@@ -101,19 +116,7 @@ func findKey(leaves []leaf, key []byte) int {
 	panic(fmt.Sprintf("no leaf at key %x", key))
 }
 
-// findPrefix returns the index of the first leaf whose key starts with the
-// given prefix, so a case can name "some code leaf" without knowing which.
-func findPrefix(leaves []leaf, prefix []byte) int {
-	for i, l := range leaves {
-		if bytes.HasPrefix(l.key, prefix) {
-			return i
-		}
-	}
-	panic(fmt.Sprintf("no leaf under prefix %x", prefix))
-}
-
-// insertSorted puts a leaf in PBT-key order, which is where a well-formed
-// artifact would carry it.
+// insertSorted keeps PBT-key order.
 func insertSorted(leaves []leaf, l leaf) []leaf {
 	i := 0
 	for i < len(leaves) && bytes.Compare(leaves[i].key, l.key) < 0 {
@@ -122,7 +125,6 @@ func insertSorted(leaves []leaf, l leaf) []leaf {
 	return append(leaves[:i:i], append([]leaf{l}, leaves[i:]...)...)
 }
 
-// findRecord returns the index of the preimage record for addr.
 func findRecord(recs []record, addr common.Address) int {
 	for i, r := range recs {
 		if r.addr == addr {

@@ -14,191 +14,147 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-// The anchor state. Every account here exists to make one EIP-8297 embedding
-// rule observable in the artifacts, so that a client consuming them has to
-// have implemented that rule rather than the common case only. Addresses are
-// spelled out so the same fixture can be read against a hex dump.
+// Anchor state: one account per embedding rule.
 var (
-	eoaBalance     = common.HexToAddress("0x0000000000000000000000000000000000000101")
-	eoaNonce       = common.HexToAddress("0x0000000000000000000000000000000000000102")
-	eoaMaxima      = common.HexToAddress("0x0000000000000000000000000000000000000103")
-	precompile     = common.HexToAddress("0x0000000000000000000000000000000000000004")
-	codeOneByte    = common.HexToAddress("0x0000000000000000000000000000000000000201")
-	codeChunkExact = common.HexToAddress("0x0000000000000000000000000000000000000202")
-	codeChunkPlus  = common.HexToAddress("0x0000000000000000000000000000000000000203")
-	codeStraddle   = common.HexToAddress("0x0000000000000000000000000000000000000204")
-	codeZeroChunk  = common.HexToAddress("0x0000000000000000000000000000000000000205")
-	codeAllZero    = common.HexToAddress("0x0000000000000000000000000000000000000206")
-	codeTwoGroups  = common.HexToAddress("0x0000000000000000000000000000000000000207")
-	codeFakeDelega = common.HexToAddress("0x0000000000000000000000000000000000000209")
-	sharedA        = common.HexToAddress("0x0000000000000000000000000000000000000301")
-	sharedB        = common.HexToAddress("0x0000000000000000000000000000000000000302")
-	delegatedA     = common.HexToAddress("0x0000000000000000000000000000000000000401")
-	delegatedB     = common.HexToAddress("0x0000000000000000000000000000000000000402")
-	delegatedC     = common.HexToAddress("0x0000000000000000000000000000000000000403")
-	delegateTarget = common.HexToAddress("0x00000000000000000000000000000000000004ff")
-	storageSpread  = common.HexToAddress("0x0000000000000000000000000000000000000501")
-	storageValues  = common.HexToAddress("0x0000000000000000000000000000000000000502")
-	storageOnEOA   = common.HexToAddress("0x0000000000000000000000000000000000000503")
+	eoaBalance      = common.HexToAddress("0x0000000000000000000000000000000000000101")
+	eoaNonce        = common.HexToAddress("0x0000000000000000000000000000000000000102")
+	eoaMaxima       = common.HexToAddress("0x0000000000000000000000000000000000000103")
+	precompile      = common.HexToAddress("0x0000000000000000000000000000000000000004")
+	codeOneByte     = common.HexToAddress("0x0000000000000000000000000000000000000201")
+	codeChunkExact  = common.HexToAddress("0x0000000000000000000000000000000000000202")
+	codeChunkPlus   = common.HexToAddress("0x0000000000000000000000000000000000000203")
+	codeStraddle    = common.HexToAddress("0x0000000000000000000000000000000000000204")
+	codeZeroChunk   = common.HexToAddress("0x0000000000000000000000000000000000000205")
+	codeAllZero     = common.HexToAddress("0x0000000000000000000000000000000000000206")
+	codeTwoGroups   = common.HexToAddress("0x0000000000000000000000000000000000000207")
+	codeFakeDelega  = common.HexToAddress("0x0000000000000000000000000000000000000208")
+	codeFake23      = common.HexToAddress("0x0000000000000000000000000000000000000209")
+	codePushPastEnd = common.HexToAddress("0x000000000000000000000000000000000000020a")
+	codeSmallPush   = common.HexToAddress("0x000000000000000000000000000000000000020b")
+	codeTrailZero   = common.HexToAddress("0x000000000000000000000000000000000000020c")
+	codeZeroBalance = common.HexToAddress("0x000000000000000000000000000000000000020d")
+	sharedA         = common.HexToAddress("0x0000000000000000000000000000000000000301")
+	sharedB         = common.HexToAddress("0x0000000000000000000000000000000000000302")
+	delegatedA      = common.HexToAddress("0x0000000000000000000000000000000000000401")
+	delegatedB      = common.HexToAddress("0x0000000000000000000000000000000000000402")
+	delegatedC      = common.HexToAddress("0x0000000000000000000000000000000000000403")
+	delegatedToNone = common.HexToAddress("0x0000000000000000000000000000000000000404")
+	delegatedToEOA  = common.HexToAddress("0x0000000000000000000000000000000000000405")
+	delegatedChain  = common.HexToAddress("0x0000000000000000000000000000000000000406")
+	delegateTarget  = common.HexToAddress("0x00000000000000000000000000000000000004ff")
+	storageSpread   = common.HexToAddress("0x0000000000000000000000000000000000000501")
+	storageValues   = common.HexToAddress("0x0000000000000000000000000000000000000502")
+	storageOnEOA    = common.HexToAddress("0x0000000000000000000000000000000000000503")
+	storageOverflow = common.HexToAddress("0x0000000000000000000000000000000000000504")
 )
 
-// chunk is 31 bytes of code, the payload of one PBT code leaf.
 const chunk = 31
 
-// maxUint128 is the largest balance the basic-data leaf's 16-byte field can
-// hold, so it is the largest one a conversion can represent at all.
-var maxUint128 = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 128), big.NewInt(1))
+var (
+	maxUint128 = new(big.Int).Sub(pow2(128), big.NewInt(1))
+	maxSlot    = new(big.Int).Sub(pow2(256), big.NewInt(1))
+)
 
-// fill returns n bytes of JUMPDEST, which chunk to non-zero values and carry
-// no PUSHDATA, so every chunk of such code is present in the tree.
-func fill(n int) []byte {
-	code := make([]byte, n)
-	for i := range code {
-		code[i] = 0x5b
-	}
-	return code
-}
+func pow2(n uint) *big.Int { return new(big.Int).Lsh(big.NewInt(1), n) }
 
-// straddlingPush returns code whose PUSH32 operand crosses a chunk boundary,
-// so the second chunk must record a non-zero leading-PUSHDATA count.
+// h is a 32-byte big-endian slot number or value.
+func h(n int64) common.Hash { return common.BigToHash(big.NewInt(n)) }
+
+// fill is n JUMPDESTs: every chunk present, no PUSHDATA.
+func fill(n int) []byte { return bytes.Repeat([]byte{0x5b}, n) }
+
+// straddlingPush has a PUSH32 whose operand crosses the first chunk boundary.
 func straddlingPush() []byte {
 	code := fill(2 * chunk)
-	// PUSH32 lands two bytes before the boundary: 29 of its 32 operand bytes
-	// fall in the next chunk, which must say so in its first byte.
 	code[chunk-2] = 0x7f
-	for i := chunk - 1; i < chunk+30 && i < len(code); i++ {
+	for i := chunk - 1; i < chunk+30; i++ {
 		code[i] = 0xaa
 	}
 	return code
 }
 
-// zeroChunkCode returns code whose second chunk is 31 zero bytes with no
-// PUSHDATA running into it, so EIP-8297 requires that leaf to be absent while
-// the chunks either side of it are present.
-func zeroChunkCode() []byte {
-	code := make([]byte, 3*chunk)
-	copy(code, fill(chunk))
-	copy(code[2*chunk:], fill(chunk))
-	return code
+// pushPastEnd has a PUSH32 as the last opcode: its operand is 31 zero bytes
+// running past the code's end, so the second chunk is present with a leading
+// count at the cap of 31 and a partial, all-zero slice.
+func pushPastEnd() []byte { return append(fill(chunk-1), 0x7f, 0x00, 0x00) }
+
+// smallPushStraddle has a PUSH2 whose second operand byte starts the next
+// chunk, and whose operand bytes look like PUSH32 opcodes.
+func smallPushStraddle() []byte {
+	return slices.Concat(fill(chunk-2), []byte{0x61, 0x7f, 0x7f}, fill(chunk))
 }
 
-// twoGroupCode returns code longer than one code group (256 chunks), so its
-// leaves span two CODE_ZONE stems.
-func twoGroupCode() []byte { return fill(257*chunk + 1) }
+// zeroChunkCode has an all-zero middle chunk with no PUSHDATA running into
+// it, which must be absent while its neighbours are present.
+func zeroChunkCode() []byte {
+	return slices.Concat(fill(chunk), make([]byte, chunk), fill(chunk))
+}
 
-// delegation returns the EIP-7702 indicator for target.
 func delegation(target common.Address) []byte {
 	return append([]byte{0xef, 0x01, 0x00}, target.Bytes()...)
 }
 
-// slot is a 32-byte big-endian storage slot number.
-func slot(n *big.Int) common.Hash { return common.BigToHash(n) }
-
-func pow2(n uint) *big.Int { return new(big.Int).Lsh(big.NewInt(1), n) }
-
-// edgeCaseAlloc is the anchor state: one entry per embedding rule.
 func edgeCaseAlloc() types.GenesisAlloc {
 	shared := fill(3 * chunk)
-	maxSlot := new(big.Int).Sub(pow2(256), big.NewInt(1))
+	one := big.NewInt(1)
 
-	alloc := types.GenesisAlloc{
-		// Accounts with no code: the MPT commits a code hash for them too, so
-		// each must carry a code-hash leaf holding the hash of empty code.
+	return types.GenesisAlloc{
 		eoaBalance: {Balance: big.NewInt(1_000_000)},
 		eoaNonce:   {Balance: big.NewInt(0), Nonce: 7},
 		eoaMaxima:  {Balance: maxUint128, Nonce: ^uint64(0)},
-		precompile: {Balance: big.NewInt(1)},
+		precompile: {Balance: one},
 
-		// Code-size boundaries around the 31-byte chunk.
-		codeOneByte:    {Balance: big.NewInt(1), Code: fill(1)},
-		codeChunkExact: {Balance: big.NewInt(1), Code: fill(chunk)},
-		codeChunkPlus:  {Balance: big.NewInt(1), Code: fill(chunk + 1)},
-		codeStraddle:   {Balance: big.NewInt(1), Code: straddlingPush()},
+		codeOneByte:     {Balance: one, Code: fill(1)},
+		codeChunkExact:  {Balance: one, Code: fill(chunk)},
+		codeChunkPlus:   {Balance: one, Code: fill(chunk + 1)},
+		codeStraddle:    {Balance: one, Code: straddlingPush()},
+		codePushPastEnd: {Balance: one, Code: pushPastEnd()},
+		codeSmallPush:   {Balance: one, Code: smallPushStraddle()},
+		codeZeroChunk:   {Balance: one, Code: zeroChunkCode()},
+		codeTrailZero:   {Balance: one, Code: append(fill(chunk), 0x00)},
+		codeAllZero:     {Balance: one, Code: make([]byte, 2*chunk)},
+		codeTwoGroups:   {Balance: one, Code: fill(257*chunk + 1)},
+		codeFakeDelega:  {Balance: one, Code: append(delegation(delegateTarget), 0x5b)},
+		codeFake23:      {Balance: one, Code: append([]byte{0xef, 0x02, 0x00}, delegateTarget.Bytes()...)},
+		codeZeroBalance: {Balance: big.NewInt(0), Code: fill(1)},
 
-		// Zero chunks: absent when they carry no PUSHDATA, and an account
-		// whose code is entirely zeros has no code leaves at all while still
-		// holding a non-zero code size and a code hash.
-		codeZeroChunk: {Balance: big.NewInt(1), Code: zeroChunkCode()},
-		codeAllZero:   {Balance: big.NewInt(1), Code: make([]byte, 2*chunk)},
-
-		// Code spanning two code groups, so the chunk index crosses its
-		// sub-index byte and a second CODE_ZONE stem is needed. The EIP-170
-		// maximum size is deliberately not here: it adds 793 code leaves to
-		// every fixture copy and exercises nothing this does not.
-		codeTwoGroups: {Balance: big.NewInt(1), Code: twoGroupCode()},
-
-		// Code that begins with the delegation marker but is not an
-		// indicator: it is ordinary code, and must be chunked as such.
-		codeFakeDelega: {Balance: big.NewInt(1), Code: append(delegation(delegateTarget), fill(1)...)},
-
-		// Identical bytecode under two accounts: the code leaves are
-		// content-addressed, so they must appear exactly once.
-		sharedA: {Balance: big.NewInt(1), Code: shared},
+		sharedA: {Balance: one, Code: shared},
 		sharedB: {Balance: big.NewInt(2), Code: shared},
 
-		// Delegations: two to the same target, one to another, and one that
-		// also holds storage, a nonce and a balance.
-		delegatedA: {Balance: big.NewInt(1), Code: delegation(delegateTarget)},
-		delegatedB: {Balance: big.NewInt(1), Code: delegation(delegateTarget)},
+		delegatedA: {Balance: one, Code: delegation(delegateTarget)},
+		delegatedB: {Balance: one, Code: delegation(delegateTarget)},
 		delegatedC: {
 			Balance: big.NewInt(3), Nonce: 4, Code: delegation(sharedA),
-			Storage: map[common.Hash]common.Hash{
-				slot(big.NewInt(1)): common.BigToHash(big.NewInt(0x11)),
-			},
+			Storage: map[common.Hash]common.Hash{h(1): h(0x11), h(300): h(0x12)},
 		},
-		delegateTarget: {Balance: big.NewInt(1), Code: fill(chunk)},
+		delegatedToNone: {Balance: one, Code: delegation(common.HexToAddress("0x0999"))},
+		delegatedToEOA:  {Balance: one, Code: delegation(eoaBalance)},
+		delegatedChain:  {Balance: one, Code: delegation(delegatedA)},
+		delegateTarget:  {Balance: one, Code: fill(chunk)},
 
-		// Storage either side of the header boundary, at the sub-index
-		// boundary, and in several storage groups.
 		storageSpread: {
-			Balance: big.NewInt(1),
-			Code:    fill(chunk),
+			Balance: one, Code: fill(chunk),
 			Storage: map[common.Hash]common.Hash{
-				slot(big.NewInt(0)):   common.BigToHash(big.NewInt(0xa0)),
-				slot(big.NewInt(63)):  common.BigToHash(big.NewInt(0xa1)),
-				slot(big.NewInt(64)):  common.BigToHash(big.NewInt(0xa2)),
-				slot(big.NewInt(255)): common.BigToHash(big.NewInt(0xa3)),
-				slot(big.NewInt(256)): common.BigToHash(big.NewInt(0xa4)),
-				slot(big.NewInt(511)): common.BigToHash(big.NewInt(0xa5)),
-				slot(big.NewInt(512)): common.BigToHash(big.NewInt(0xa6)),
-				slot(maxSlot):         common.BigToHash(big.NewInt(0xa7)),
+				h(0): h(0xa0), h(63): h(0xa1), h(64): h(0xa2), h(255): h(0xa3),
+				h(256): h(0xa4), h(511): h(0xa5), h(512): h(0xa6),
+				common.BigToHash(maxSlot): h(0xa7),
 			},
 		},
-
-		// Storage values: the smallest, the largest, and one with leading
-		// zero bytes, which the snapshot encodes as a canonical integer.
 		storageValues: {
-			Balance: big.NewInt(1),
-			Code:    fill(chunk),
+			Balance: one, Code: fill(chunk),
 			Storage: map[common.Hash]common.Hash{
-				slot(big.NewInt(1)):  common.BigToHash(big.NewInt(1)),
-				slot(big.NewInt(2)):  common.BigToHash(new(big.Int).Sub(pow2(256), big.NewInt(1))),
-				slot(big.NewInt(3)):  common.BigToHash(pow2(8)),
-				slot(big.NewInt(4)):  common.BigToHash(pow2(248)),
-				slot(big.NewInt(65)): common.BigToHash(big.NewInt(0xff)),
+				h(1): h(1), h(2): common.BigToHash(maxSlot), h(3): h(256),
+				h(4): common.BigToHash(pow2(248)), h(65): h(0xff),
 			},
 		},
-
-		// An account with storage but no code, which the embedding treats no
-		// differently from a contract's storage.
-		storageOnEOA: {
-			Balance: big.NewInt(1),
-			Storage: map[common.Hash]common.Hash{
-				slot(big.NewInt(0)):  common.BigToHash(big.NewInt(1)),
-				slot(big.NewInt(64)): common.BigToHash(big.NewInt(2)),
-			},
-		},
+		storageOnEOA:    {Balance: one, Storage: map[common.Hash]common.Hash{h(0): h(1), h(64): h(2)}},
+		storageOverflow: {Balance: one, Storage: map[common.Hash]common.Hash{h(300): h(3)}},
 	}
-	return alloc
 }
 
-// derivePreimages lays out the EIP-8347 preimage file from the allocation
-// alone: fixed-width records ordered by keccak256(address), each account's
-// slot keys at their full 32 bytes ordered by keccak256(slotKey), nothing
-// between records and nothing after the last one.
-//
-// Deriving it rather than taking a producer's word for it is what keeps the
-// canonical bytes independent of every client being measured against them.
+// derivePreimages lays the EIP-8347 preimage file out from the allocation:
+// fixed-width records in keccak256(address) order, slots in keccak256(slot)
+// order.
 func derivePreimages(alloc types.GenesisAlloc) []byte {
 	byHash := func(a, b []byte) int { return bytes.Compare(crypto.Keccak256(a), crypto.Keccak256(b)) }
 
@@ -225,9 +181,36 @@ func derivePreimages(alloc types.GenesisAlloc) []byte {
 	return buf.Bytes()
 }
 
-// genesisJSON renders the allocation as the genesis file every client is
-// initialised from. The fork schedule is the one hive's own chains use, so
-// each client's existing mapper accepts it unchanged.
+// checkOrdering fails unless the state can tell hashed-key order from raw
+// order, which the ordering cases depend on.
+func checkOrdering(alloc types.GenesisAlloc) error {
+	addrs := make([]common.Address, 0, len(alloc))
+	for addr := range alloc {
+		addrs = append(addrs, addr)
+	}
+	raw := slices.Clone(addrs)
+	slices.SortFunc(raw, func(a, b common.Address) int { return bytes.Compare(a[:], b[:]) })
+	slices.SortFunc(addrs, func(a, b common.Address) int {
+		return bytes.Compare(crypto.Keccak256(a[:]), crypto.Keccak256(b[:]))
+	})
+	if slices.Equal(raw, addrs) {
+		return fmt.Errorf("addresses sort the same by raw bytes and by keccak")
+	}
+	slots := make([]common.Hash, 0)
+	for slot := range alloc[storageSpread].Storage {
+		slots = append(slots, slot)
+	}
+	num := slices.Clone(slots)
+	slices.SortFunc(num, func(a, b common.Hash) int { return bytes.Compare(a[:], b[:]) })
+	slices.SortFunc(slots, func(a, b common.Hash) int {
+		return bytes.Compare(crypto.Keccak256(a[:]), crypto.Keccak256(b[:]))
+	})
+	if slices.Equal(num, slots) {
+		return fmt.Errorf("storageSpread's slots sort the same numerically and by keccak")
+	}
+	return nil
+}
+
 func genesisJSON(alloc types.GenesisAlloc) ([]byte, error) {
 	type genesis struct {
 		Config     map[string]any     `json:"config"`
@@ -278,6 +261,9 @@ func genesisJSON(alloc types.GenesisAlloc) ([]byte, error) {
 }
 
 func writeGenesis(path string, alloc types.GenesisAlloc) error {
+	if err := checkOrdering(alloc); err != nil {
+		return err
+	}
 	blob, err := genesisJSON(alloc)
 	if err != nil {
 		return fmt.Errorf("rendering genesis: %w", err)

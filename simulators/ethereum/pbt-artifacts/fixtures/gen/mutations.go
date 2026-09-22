@@ -11,446 +11,306 @@ import (
 	"github.com/ethereum/go-ethereum/trie/bintrie"
 )
 
-// mutations is the catalogue: one entry per way an artifact can lie, plus the
-// cases whose treatment the EIP leaves open, which are carried as
-// "unspecified" so they are reported without being scored.
-//
-// A case that recomputes the claimed root (the default for the leaf-set
-// mutations) reaches past the internal-consistency check to the layer it
-// targets, which is the consensus-anchoring one. A case marked keepRoot
-// leaves the valid root in place and so is caught by the first check.
+// mutations is the catalogue, one entry per way an artifact can lie. A leaf
+// mutation recomputes the claimed root unless keepRoot is set, so it reaches
+// past check 1 to the rule it targets.
 func mutations(valid *artifacts) []mutation {
 	var (
-		zeroValue [32]byte
-		oneValue  = [32]byte{31: 1}
+		zero      [32]byte
+		one       = [32]byte{31: 1}
+		emptyCode = [32]byte(crypto.Keccak256(nil))
+		codeHash  = crypto.Keccak256Hash(fill(chunk))
+		reject    = func(m mutation) mutation { m.expect = "reject"; return m }
 	)
-	return []mutation{
-		// --- the preimage file ------------------------------------------
-		{
-			id: "preimages/trailing-byte", suite: "preimages",
-			clause: "preimage.no-trailing-bytes", expect: "reject",
-			note:   "the file ends after the final record; any trailing byte makes it invalid",
-			rawPre: func(b []byte) []byte { return append(bytes.Clone(b), 0x00) },
-		},
-		{
-			id: "preimages/truncated-record", suite: "preimages",
-			clause: "preimage.record-self-delimiting", expect: "reject",
-			note:   "the last record's final slot key is cut short",
-			rawPre: func(b []byte) []byte { return bytes.Clone(b)[:len(b)-1] },
-		},
-		{
-			id: "preimages/slot-count-overclaim", suite: "preimages",
-			clause: "preimage.record-self-delimiting", expect: "reject",
-			note: "the first record claims more slots than the file can hold",
-			rawPre: func(b []byte) []byte {
-				out := bytes.Clone(b)
-				binary.BigEndian.PutUint32(out[common.AddressLength:], 0xffff)
-				return out
-			},
-		},
-		{
-			id: "preimages/raw-address-order", suite: "preimages",
-			clause: "preimage.hashed-key-order", expect: "reject",
-			note: "records sorted by raw address rather than by keccak256(address)",
-			rawPre: func(b []byte) []byte {
-				recs, err := decodePreimages(b)
-				if err != nil {
-					panic(err)
-				}
-				slices.SortStableFunc(recs, func(x, y record) int { return bytes.Compare(x.addr[:], y.addr[:]) })
-				return encodeRecordsVerbatim(recs, nil)
-			},
-		},
-		{
-			id: "preimages/raw-slot-order", suite: "preimages",
-			clause: "preimage.hashed-key-order", expect: "reject",
-			note: "slot keys sorted by slot number rather than by keccak256(slotKey)",
-			rawPre: func(b []byte) []byte {
-				recs, err := decodePreimages(b)
-				if err != nil {
-					panic(err)
-				}
-				return encodeRecordsVerbatim(recs, func(slots []common.Hash) []common.Hash {
-					out := slices.Clone(slots)
-					slices.SortStableFunc(out, func(x, y common.Hash) int { return bytes.Compare(x[:], y[:]) })
-					return out
-				})
-			},
-		},
-		{
-			id: "preimages/duplicate-address", suite: "preimages",
-			clause: "preimage.address-appears-once", expect: "reject",
-			note: "one account carries two records",
-			rawPre: func(b []byte) []byte {
-				recs, err := decodePreimages(b)
-				if err != nil {
-					panic(err)
-				}
-				return encodeRecordsVerbatim(append(recs, recs[0]), nil)
-			},
-		},
-		{
-			id: "preimages/duplicate-slot", suite: "preimages",
-			clause: "preimage.no-duplicate-slots", expect: "reject",
-			note: "a storage-holding account names one slot twice",
-			rawPre: func(b []byte) []byte {
-				recs, err := decodePreimages(b)
-				if err != nil {
-					panic(err)
-				}
-				i := findRecord(recs, storageSpread)
-				recs[i].slots = append(recs[i].slots, recs[i].slots[0])
-				return encodeRecordsVerbatim(recs, nil)
-			},
-		},
-		{
-			id: "preimages/missing-account", suite: "preimages",
-			clause: "converter.preimage-set-matches-leaves", expect: "reject",
-			note:      "an account the snapshot carries has no preimage record",
-			preimages: func(recs []record) []record { return deleteRecord(recs, eoaBalance) },
-		},
-		{
-			id: "preimages/surplus-account", suite: "preimages",
-			clause: "converter.preimage-set-matches-leaves", expect: "reject",
-			note: "a preimage record names an account the state does not hold",
-			preimages: func(recs []record) []record {
-				return append(recs, record{addr: common.HexToAddress("0x00000000000000000000000000000000deadbeef")})
-			},
-		},
-		{
-			id: "preimages/missing-header-slot", suite: "preimages",
-			clause: "converter.preimage-set-matches-leaves", expect: "reject",
-			note: "a header-range slot the state holds is absent from the file",
-			preimages: func(recs []record) []record {
-				i := findRecord(recs, storageSpread)
-				recs[i].slots = slices.DeleteFunc(recs[i].slots, func(h common.Hash) bool {
-					return h == common.BigToHash(big.NewInt(63))
-				})
-				return recs
-			},
-		},
-		{
-			id: "preimages/surplus-header-slot", suite: "preimages",
-			clause: "converter.preimage-set-matches-leaves", expect: "reject",
-			note: "the file names a header-range slot the state does not hold",
-			preimages: func(recs []record) []record {
-				i := findRecord(recs, storageSpread)
-				recs[i].slots = append(recs[i].slots, common.BigToHash(big.NewInt(7)))
-				return recs
-			},
-		},
-		{
-			id: "preimages/missing-overflow-slot", suite: "preimages",
-			clause: "converter.preimage-set-matches-leaves", expect: "reject",
-			note: "an overflow slot the state holds is absent, so its leaf can never be keyed",
-			preimages: func(recs []record) []record {
-				i := findRecord(recs, storageSpread)
-				recs[i].slots = slices.DeleteFunc(recs[i].slots, func(h common.Hash) bool {
-					return h == common.BigToHash(big.NewInt(256))
-				})
-				return recs
-			},
-		},
-		{
-			id: "preimages/empty-file", suite: "preimages",
-			clause: "converter.preimage-set-matches-leaves", expect: "reject",
-			note:   "no preimages at all against a populated snapshot",
-			rawPre: func([]byte) []byte { return nil },
-		},
+	dropRecord := func(addr common.Address) func([]record) []record {
+		return func(recs []record) []record { return deleteRecord(recs, addr) }
+	}
+	preimages := func(id, clause, note string, f func([]record) []record) mutation {
+		return reject(mutation{id: "preimages/" + id, suite: "preimages", clause: clause, note: note, records: f})
+	}
+	rawPre := func(id, clause, note string, f func([]byte) []byte) mutation {
+		return reject(mutation{id: "preimages/" + id, suite: "preimages", clause: clause, note: note, rawPre: f})
+	}
+	snapshot := func(id, clause, note string, f func([]leaf) []leaf) mutation {
+		return reject(mutation{id: "snapshot/" + id, suite: "snapshot", clause: clause, note: note, leaves: f})
+	}
+	rawSnap := func(id, clause, note string, f func([]byte) []byte) mutation {
+		return reject(mutation{id: "snapshot/" + id, suite: "snapshot", clause: clause, note: note, rawSnap: f})
+	}
+	keep := func(m mutation) mutation { m.keepRoot = true; return m }
+	verbatim := func(m mutation) mutation { m.verbatim = true; return m }
+	withRecords := func(m mutation, f func([]record) []record) mutation { m.records = f; return m }
 
-		// --- the snapshot: header and encoding ---------------------------
-		{
-			id: "snapshot/wrong-claimed-root", suite: "snapshot",
-			clause: "snapshot.root-recomputed", expect: "reject",
-			note: "the header claims a root the leaves do not fold to",
-			rawSnap: func(b []byte) []byte {
+	return []mutation{
+		// The preimage file.
+		rawPre("trailing-byte", "preimage.no-trailing-bytes", "",
+			func(b []byte) []byte { return append(bytes.Clone(b), 0x00) }),
+		rawPre("truncated-record", "preimage.record-self-delimiting", "the last slot key is cut short",
+			func(b []byte) []byte { return bytes.Clone(b)[:len(b)-1] }),
+		rawPre("slot-count-huge", "preimage.record-self-delimiting", "the first record claims 2^32-1 slots",
+			func(b []byte) []byte {
 				out := bytes.Clone(b)
-				out[31] ^= 0x01
+				binary.BigEndian.PutUint32(out[common.AddressLength:], 0xffffffff)
 				return out
-			},
-		},
-		{
-			id: "snapshot/leaf-count-high", suite: "snapshot",
-			clause: "snapshot.leaf-count-recomputed", expect: "reject",
-			note:    "the header claims one leaf more than the file carries",
-			rawSnap: func(b []byte) []byte { return withCount(b, uint64(len(valid.leaves))+1) },
-		},
-		{
-			id: "snapshot/leaf-count-low", suite: "snapshot",
-			clause: "snapshot.leaf-count-recomputed", expect: "reject",
-			note:    "the header claims one leaf fewer than the file carries",
-			rawSnap: func(b []byte) []byte { return withCount(b, uint64(len(valid.leaves))-1) },
-		},
-		{
-			id: "snapshot/truncated-stream", suite: "snapshot",
-			clause: "snapshot.record-self-delimiting", expect: "reject",
-			note:    "the final record is cut short",
-			rawSnap: func(b []byte) []byte { return bytes.Clone(b)[:len(b)-1] },
-		},
-		{
-			id: "snapshot/trailing-garbage", suite: "snapshot",
-			clause: "snapshot.leaf-count-recomputed", expect: "reject",
-			note:    "bytes follow the last record the header accounts for",
-			rawSnap: func(b []byte) []byte { return append(bytes.Clone(b), 0xde, 0xad) },
-		},
-		{
-			id: "snapshot/records-out-of-order", suite: "snapshot",
-			clause: "snapshot.ascending-key-order", expect: "reject",
-			note: "two adjacent records are swapped, so the stream is not ascending",
-			snapshot: func(leaves []leaf) []leaf {
-				leaves[0], leaves[1] = leaves[1], leaves[0]
+			}),
+		verbatim(preimages("raw-address-order", "preimage.hashed-key-order", "sorted by raw address",
+			func(recs []record) []record {
+				slices.SortStableFunc(recs, func(x, y record) int { return bytes.Compare(x.addr[:], y.addr[:]) })
+				return recs
+			})),
+		verbatim(preimages("raw-slot-order", "preimage.hashed-key-order", "slots sorted by number",
+			func(recs []record) []record {
+				for i := range recs {
+					slices.SortStableFunc(recs[i].slots, func(x, y common.Hash) int { return bytes.Compare(x[:], y[:]) })
+				}
+				return recs
+			})),
+		verbatim(preimages("duplicate-address", "preimage.address-appears-once", "one account twice, adjacent",
+			func(recs []record) []record { return slices.Insert(recs, 1, recs[0]) })),
+		verbatim(preimages("duplicate-slot", "preimage.no-duplicate-slots", "one slot twice, adjacent",
+			func(recs []record) []record {
+				i := findRecord(recs, storageSpread)
+				recs[i].slots = slices.Insert(recs[i].slots, 1, recs[i].slots[0])
+				return recs
+			})),
+		preimages("missing-account", "converter.preimage-set-matches-leaves", "", dropRecord(eoaBalance)),
+		preimages("surplus-account", "converter.preimage-set-matches-leaves", "",
+			func(recs []record) []record {
+				return append(recs, record{addr: common.HexToAddress("0x00000000000000000000000000000000deadbeef")})
+			}),
+		preimages("missing-header-slot", "converter.preimage-set-matches-leaves", "slot 63 of storageSpread",
+			func(recs []record) []record {
+				i := findRecord(recs, storageSpread)
+				recs[i].slots = slices.DeleteFunc(recs[i].slots, func(s common.Hash) bool { return s == h(63) })
+				return recs
+			}),
+		preimages("surplus-header-slot", "converter.preimage-set-matches-leaves", "slot 7 of storageSpread",
+			func(recs []record) []record {
+				i := findRecord(recs, storageSpread)
+				recs[i].slots = append(recs[i].slots, h(7))
+				return recs
+			}),
+		preimages("missing-overflow-slot", "converter.preimage-set-matches-leaves",
+			"slot 256 of storageSpread; its stem is a one-way hash, so the leaf can never be keyed",
+			func(recs []record) []record {
+				i := findRecord(recs, storageSpread)
+				recs[i].slots = slices.DeleteFunc(recs[i].slots, func(s common.Hash) bool { return s == h(256) })
+				return recs
+			}),
+		rawPre("empty-file", "converter.preimage-set-matches-leaves", "", func([]byte) []byte { return []byte{} }),
+
+		// The snapshot: framing.
+		rawSnap("wrong-claimed-root", "snapshot.root-recomputed", "",
+			func(b []byte) []byte { out := bytes.Clone(b); out[31] ^= 1; return out }),
+		rawSnap("leaf-count-high", "snapshot.leaf-count-recomputed", "",
+			func(b []byte) []byte { return withCount(b, uint64(len(valid.leaves))+1) }),
+		rawSnap("leaf-count-low", "snapshot.leaf-count-recomputed", "",
+			func(b []byte) []byte { return withCount(b, uint64(len(valid.leaves))-1) }),
+		rawSnap("leaf-count-huge", "snapshot.leaf-count-recomputed", "2^62 leaves claimed over the valid body",
+			func(b []byte) []byte { return withCount(b, 1<<62) }),
+		rawSnap("truncated-stream", "snapshot.record-self-delimiting", "",
+			func(b []byte) []byte { return bytes.Clone(b)[:len(b)-1] }),
+		rawSnap("trailing-garbage", "snapshot.leaf-count-recomputed", "",
+			func(b []byte) []byte { return append(bytes.Clone(b), 0xde, 0xad) }),
+		keep(snapshot("records-out-of-order", "snapshot.ascending-key-order", "eoaBalance's first two leaves swapped",
+			func(leaves []leaf) []leaf {
+				i := findKey(leaves, bintrie.BasicDataKey(eoaBalance))
+				leaves[i], leaves[i+1] = leaves[i+1], leaves[i]
 				return leaves
-			},
-			keepRoot: true,
-		},
-		{
-			id: "snapshot/duplicate-key", suite: "snapshot",
-			clause: "snapshot.ascending-key-order", expect: "reject",
-			note: "one key appears twice, which ascending order forbids",
-			snapshot: func(leaves []leaf) []leaf {
-				return slices.Insert(leaves, 1, leaves[0])
-			},
-			keepRoot: true,
-		},
-		{
-			id: "snapshot/reserved-zone", suite: "snapshot",
-			clause: "snapshot.zone-byte", expect: "reject",
-			note: "a key sits in the reserved 0x02-0xFE zone range",
-			snapshot: func(leaves []leaf) []leaf {
-				leaves[0].key = bytes.Clone(leaves[0].key)
-				leaves[0].key[0] = 0x02
+			})),
+		keep(snapshot("duplicate-key", "snapshot.ascending-key-order", "",
+			func(leaves []leaf) []leaf {
+				i := findKey(leaves, bintrie.BasicDataKey(eoaBalance))
+				return slices.Insert(leaves, i+1, leaves[i])
+			})),
+		keep(snapshot("reserved-zone", "snapshot.zone-byte", "eoaBalance's basic-data key in zone 0x02",
+			func(leaves []leaf) []leaf {
+				i := findKey(leaves, bintrie.BasicDataKey(eoaBalance))
+				leaves[i].key = bytes.Clone(leaves[i].key)
+				leaves[i].key[0] = 0x02
 				return leaves
-			},
-			keepRoot: true,
-		},
-		{
-			id: "snapshot/wrong-key-length", suite: "snapshot",
-			clause: "snapshot.zone-fixes-key-length", expect: "reject",
-			note: "an account-zone key carries a storage-zone key length",
-			snapshot: func(leaves []leaf) []leaf {
-				i := findPrefix(leaves, []byte{bintrie.AccountZone})
+			})),
+		keep(snapshot("wrong-key-length", "snapshot.zone-fixes-key-length", "an account-zone key at storage-zone length",
+			func(leaves []leaf) []leaf {
+				i := findKey(leaves, bintrie.BasicDataKey(eoaBalance))
 				leaves[i].key = append(bytes.Clone(leaves[i].key), make([]byte, bintrie.StorageKeyLength-bintrie.AccountKeyLength)...)
 				return leaves
-			},
-			keepRoot: true,
-		},
-		{
-			id: "snapshot/zero-value-present", suite: "snapshot",
-			clause: "snapshot.no-zero-values", expect: "reject",
-			note: "a leaf holds 32 zero bytes, which EIP-8297 requires to be absent",
-			snapshot: func(leaves []leaf) []leaf {
-				return insertSorted(leaves, leaf{key: bintrie.HeaderKey(eoaBalance, 3), value: zeroValue})
-			},
-			keepRoot: true,
-		},
-		{
-			id: "snapshot/non-canonical-value", suite: "snapshot",
-			clause: "snapshot.canonical-integer-value", expect: "reject",
-			note:    "a value is encoded with a leading zero byte",
-			rawSnap: func(b []byte) []byte { return padFirstValue(b) },
-		},
+			})),
+		rawSnap("non-canonical-value", "snapshot.canonical-integer-value", "a leading zero byte on the first value",
+			func(b []byte) []byte {
+				return reencodeFirst(b, func(v []byte) []byte { return append([]byte{0}, v...) })
+			}),
+		rawSnap("value-too-long", "snapshot.canonical-integer-value", "a 33-byte value",
+			func(b []byte) []byte {
+				return reencodeFirst(b, func([]byte) []byte { return bytes.Repeat([]byte{1}, 33) })
+			}),
+		rawSnap("record-not-a-pair", "snapshot.record-is-key-value-pair", "a one-item list",
+			func(b []byte) []byte { return reencodeFirstRaw(b, func(k, _ []byte) []byte { return mustRLP1(k) }) }),
+		rawSnap("non-canonical-rlp-length", "snapshot.record-is-key-value-pair", "a long-form length prefix on a short string",
+			func(b []byte) []byte {
+				return reencodeFirstRaw(b, func(k, v []byte) []byte { return longFormPair(k, v) })
+			}),
 
-		// --- the snapshot: what the leaves say about the state -----------
-		{
-			id: "snapshot/flipped-value-root-kept", suite: "snapshot",
-			clause: "verification.internal-consistency", expect: "reject",
-			note: "a leaf value is altered and the claimed root left alone, so the rebuild disagrees",
-			snapshot: func(leaves []leaf) []leaf {
-				i := findKey(leaves, bintrie.BasicDataKey(eoaBalance))
-				leaves[i].value[31] ^= 0x01
+		// The snapshot: what the leaves say about the state.
+		keep(snapshot("zero-value-present", "snapshot.no-zero-values",
+			"slot 5 of storageSpread held as 32 zero bytes; no tree can commit to it, so the valid root stays",
+			func(leaves []leaf) []leaf {
+				return insertSorted(leaves, leaf{key: bintrie.HeaderKey(storageSpread, bintrie.HeaderStorageOffset+5), value: zero})
+			})),
+		snapshot("flipped-value", "verification.consensus-anchoring", "eoaBalance's balance, root recomputed",
+			func(leaves []leaf) []leaf {
+				leaves[findKey(leaves, bintrie.BasicDataKey(eoaBalance))].value[31] ^= 1
 				return leaves
-			},
-			keepRoot: true,
-		},
-		{
-			id: "snapshot/flipped-value-root-recomputed", suite: "snapshot",
-			clause: "verification.consensus-anchoring", expect: "reject",
-			note: "a balance is altered and the root recomputed, so only the MPT re-hash catches it",
-			snapshot: func(leaves []leaf) []leaf {
-				i := findKey(leaves, bintrie.BasicDataKey(eoaBalance))
-				leaves[i].value[31] ^= 0x01
+			}),
+		snapshot("nonzero-version", "embedding.version-zero", "",
+			func(leaves []leaf) []leaf {
+				leaves[findKey(leaves, bintrie.BasicDataKey(eoaBalance))].value[0] = 1
 				return leaves
-			},
-		},
-		{
-			id: "snapshot/nonzero-version", suite: "snapshot",
-			clause: "embedding.version-zero", expect: "reject",
-			note: "a basic-data leaf carries a non-zero version byte",
-			snapshot: func(leaves []leaf) []leaf {
-				i := findKey(leaves, bintrie.BasicDataKey(eoaBalance))
-				leaves[i].value[0] = 1
+			}),
+		snapshot("basic-data-reserved-garbage", "embedding.basic-data-layout", "",
+			func(leaves []leaf) []leaf {
+				v := &leaves[findKey(leaves, bintrie.BasicDataKey(eoaBalance))].value
+				v[1], v[2], v[3] = 0xff, 0xff, 0xff
 				return leaves
-			},
-		},
-		{
-			id: "snapshot/basic-data-reserved-garbage", suite: "snapshot",
-			clause: "embedding.basic-data-layout", expect: "reject",
-			note: "the three reserved bytes of a basic-data leaf are not zero",
-			snapshot: func(leaves []leaf) []leaf {
-				i := findKey(leaves, bintrie.BasicDataKey(eoaBalance))
-				leaves[i].value[1], leaves[i].value[2], leaves[i].value[3] = 0xff, 0xff, 0xff
+			}),
+		snapshot("wrong-code-size", "verification.code-limb", "codeChunkExact claims 7 bytes",
+			func(leaves []leaf) []leaf {
+				binary.BigEndian.PutUint32(leaves[findKey(leaves, bintrie.BasicDataKey(codeChunkExact))].value[4:8], 7)
 				return leaves
-			},
-		},
-		{
-			id: "snapshot/wrong-code-size", suite: "snapshot",
-			clause: "verification.code-limb", expect: "reject",
-			note: "a contract's code_size disagrees with the chunks its code hash covers",
-			snapshot: func(leaves []leaf) []leaf {
-				i := findKey(leaves, bintrie.BasicDataKey(codeChunkExact))
-				binary.BigEndian.PutUint32(leaves[i].value[4:8], 7)
+			}),
+		snapshot("codeless-nonzero-code-size", "verification.code-limb", "eoaBalance claims 1 byte of code with no chunks",
+			func(leaves []leaf) []leaf {
+				binary.BigEndian.PutUint32(leaves[findKey(leaves, bintrie.BasicDataKey(eoaBalance))].value[4:8], 1)
 				return leaves
-			},
-		},
-		{
-			id: "snapshot/missing-code-chunk", suite: "snapshot",
-			clause: "verification.code-limb", expect: "reject",
-			note: "one code leaf is dropped, so the reassembled code does not hash to its code hash",
-			snapshot: func(leaves []leaf) []leaf {
-				return slices.Delete(leaves, findPrefix(leaves, []byte{bintrie.CodeZone}), findPrefix(leaves, []byte{bintrie.CodeZone})+1)
-			},
-		},
-		{
-			id: "snapshot/flipped-pushdata-byte", suite: "snapshot",
-			clause: "verification.code-limb", expect: "reject",
-			note: "a code chunk's leading-PUSHDATA count is wrong while its code bytes are intact",
-			snapshot: func(leaves []leaf) []leaf {
-				i := findPrefix(leaves, []byte{bintrie.CodeZone})
-				leaves[i].value[0] ^= 0x01
+			}),
+		snapshot("codeless-wrong-code-hash", "verification.consensus-anchoring", "eoaBalance's code hash is not keccak(empty)",
+			func(leaves []leaf) []leaf {
+				leaves[findKey(leaves, bintrie.CodeHashKey(eoaBalance))].value = one
 				return leaves
-			},
-		},
-		{
-			id: "snapshot/orphan-code-leaves", suite: "snapshot",
-			clause: "verification.code-limb", expect: "reject",
-			note: "code leaves under a code hash no account holds",
-			snapshot: func(leaves []leaf) []leaf {
-				return insertSorted(leaves, leaf{
-					key:   bintrie.CodeChunkKey(crypto.Keccak256Hash([]byte("orphan")), 0),
-					value: oneValue,
-				})
-			},
-		},
-		{
-			id: "snapshot/delegation-and-code-hash", suite: "snapshot",
-			clause: "embedding.one-of-codehash-or-delegation", expect: "reject",
-			note: "a delegated account also carries a code-hash leaf",
-			snapshot: func(leaves []leaf) []leaf {
-				return insertSorted(leaves, leaf{key: bintrie.CodeHashKey(delegatedA), value: emptyCodeHash()})
-			},
-		},
-		{
-			id: "snapshot/delegation-wrong-code-size", suite: "snapshot",
-			clause: "embedding.delegation-code-size-23", expect: "reject",
-			note: "a delegated account's code_size is not 23",
-			snapshot: func(leaves []leaf) []leaf {
-				i := findKey(leaves, bintrie.BasicDataKey(delegatedA))
-				binary.BigEndian.PutUint32(leaves[i].value[4:8], 24)
+			}),
+		snapshot("missing-code-chunk", "verification.code-limb", "chunk 0 of the 31-byte JUMPDEST code",
+			func(leaves []leaf) []leaf {
+				i := findKey(leaves, bintrie.CodeChunkKey(codeHash, 0))
+				return slices.Delete(leaves, i, i+1)
+			}),
+		snapshot("flipped-pushdata-byte", "verification.code-limb", "chunk 0 of the 31-byte JUMPDEST code, count 0 to 1",
+			func(leaves []leaf) []leaf {
+				leaves[findKey(leaves, bintrie.CodeChunkKey(codeHash, 0))].value[0] = 1
 				return leaves
-			},
-		},
-		{
-			id: "snapshot/delegation-padding-garbage", suite: "snapshot",
-			clause: "embedding.delegation-leaf-layout", expect: "reject",
-			note: "the nine bytes after a delegation designator are not zero",
-			snapshot: func(leaves []leaf) []leaf {
+			}),
+		snapshot("pushdata-byte-out-of-range", "embedding.code-chunk-layout", "a leading count of 0xff",
+			func(leaves []leaf) []leaf {
+				leaves[findKey(leaves, bintrie.CodeChunkKey(codeHash, 0))].value[0] = 0xff
+				return leaves
+			}),
+		snapshot("orphan-code-leaves", "verification.code-limb", "chunks under a code hash no account holds",
+			func(leaves []leaf) []leaf {
+				return insertSorted(leaves, leaf{key: bintrie.CodeChunkKey(crypto.Keccak256Hash([]byte("orphan")), 0), value: one})
+			}),
+		snapshot("surplus-account-leaves", "converter.preimage-set-matches-leaves", "an account with no preimage record",
+			func(leaves []leaf) []leaf {
+				addr := common.HexToAddress("0x00000000000000000000000000000000deadbeef")
+				leaves = insertSorted(leaves, leaf{key: bintrie.BasicDataKey(addr), value: basicData(0, 0, big.NewInt(1))})
+				return insertSorted(leaves, leaf{key: bintrie.CodeHashKey(addr), value: emptyCode})
+			}),
+		snapshot("delegation-and-code-hash", "embedding.one-of-codehash-or-delegation", "delegatedA holds both",
+			func(leaves []leaf) []leaf {
+				return insertSorted(leaves, leaf{key: bintrie.CodeHashKey(delegatedA), value: emptyCode})
+			}),
+		snapshot("delegation-leaf-missing", "embedding.one-of-codehash-or-delegation", "delegatedA holds neither",
+			func(leaves []leaf) []leaf {
 				i := findKey(leaves, bintrie.DelegationKey(delegatedA))
-				leaves[i].value[31] = 0xff
+				return slices.Delete(leaves, i, i+1)
+			}),
+		snapshot("codeless-without-code-hash", "embedding.one-of-codehash-or-delegation", "eoaBalance holds neither",
+			func(leaves []leaf) []leaf {
+				i := findKey(leaves, bintrie.CodeHashKey(eoaBalance))
+				return slices.Delete(leaves, i, i+1)
+			}),
+		snapshot("delegation-with-code-leaves", "embedding.delegation-has-no-code-leaves",
+			"chunks under keccak(indicator); the MPT code hash of delegatedA is that hash, so a code-hash-to-chunks mapping would accept them",
+			func(leaves []leaf) []leaf {
+				return insertSorted(leaves, leaf{key: bintrie.CodeChunkKey(crypto.Keccak256Hash(delegation(delegateTarget)), 0), value: one})
+			}),
+		snapshot("delegation-wrong-designator", "embedding.delegation-leaf-layout", "0xef0200 prefix",
+			func(leaves []leaf) []leaf {
+				leaves[findKey(leaves, bintrie.DelegationKey(delegatedA))].value[1] = 0x02
 				return leaves
-			},
-		},
-		{
-			id: "snapshot/header-slot-in-storage-zone", suite: "snapshot",
-			clause: "embedding.header-holds-slots-0-63", expect: "reject",
-			note: "a slot below 64 is keyed in the storage zone instead of the header stem",
-			snapshot: func(leaves []leaf) []leaf {
-				// The storage-zone key for slot 0 is the one for slot 64 with
-				// its sub-index zeroed: both sit in tree_index 0, and the
-				// embedding sends only slot 64 there.
-				overflow := bytes.Clone(leaves[findKey(leaves, bintrie.StorageSlotKey(storageSpread, common.BigToHash(big.NewInt(64)).Bytes()))].key)
+			}),
+		snapshot("delegation-wrong-code-size", "embedding.delegation-code-size-23", "24",
+			func(leaves []leaf) []leaf {
+				binary.BigEndian.PutUint32(leaves[findKey(leaves, bintrie.BasicDataKey(delegatedA))].value[4:8], 24)
+				return leaves
+			}),
+		snapshot("delegation-code-size-zero", "embedding.delegation-code-size-23", "0",
+			func(leaves []leaf) []leaf {
+				binary.BigEndian.PutUint32(leaves[findKey(leaves, bintrie.BasicDataKey(delegatedA))].value[4:8], 0)
+				return leaves
+			}),
+		snapshot("delegation-padding-garbage", "embedding.delegation-leaf-layout", "",
+			func(leaves []leaf) []leaf {
+				leaves[findKey(leaves, bintrie.DelegationKey(delegatedA))].value[31] = 0xff
+				return leaves
+			}),
+		snapshot("reserved-header-subindex", "converter.preimage-set-matches-leaves",
+			"eoaBalance sub-index 3: no key the EIP defines resolves there, so no preimage can name it",
+			func(leaves []leaf) []leaf {
+				return insertSorted(leaves, leaf{key: bintrie.HeaderKey(eoaBalance, 3), value: one})
+			}),
+		snapshot("header-slot-in-storage-zone", "embedding.header-holds-slots-0-63", "storageSpread's slot 0 keyed as overflow",
+			func(leaves []leaf) []leaf {
+				overflow := bytes.Clone(leaves[findKey(leaves, bintrie.StorageSlotKey(storageSpread, h(64).Bytes()))].key)
 				overflow[len(overflow)-1] = 0
-
 				i := findKey(leaves, bintrie.HeaderKey(storageSpread, bintrie.HeaderStorageOffset))
 				moved := leaf{key: overflow, value: leaves[i].value}
 				return insertSorted(slices.Delete(leaves, i, i+1), moved)
-			},
-		},
-		{
-			id: "snapshot/anchored-elsewhere", suite: "snapshot",
-			clause: "verification.consensus-anchoring", expect: "reject",
-			note: "an internally consistent snapshot of a different state, which only the anchor check refuses",
-			snapshot: func(leaves []leaf) []leaf {
-				i := findKey(leaves, bintrie.BasicDataKey(eoaBalance))
-				return slices.Delete(leaves, i, i+1)
-			},
-		},
+			}),
+		snapshot("storage-leaf-unkeyable", "embedding.storage-key-derivation", "storageSpread's slot 512 keyed under tree_index 0",
+			func(leaves []leaf) []leaf {
+				group0 := bytes.Clone(leaves[findKey(leaves, bintrie.StorageSlotKey(storageSpread, h(64).Bytes()))].key)
+				group0[len(group0)-1] = 200
+				i := findKey(leaves, bintrie.StorageSlotKey(storageSpread, h(512).Bytes()))
+				moved := leaf{key: group0, value: leaves[i].value}
+				return insertSorted(slices.Delete(leaves, i, i+1), moved)
+			}),
+		withRecords(snapshot("anchored-elsewhere", "verification.consensus-anchoring",
+			"eoaBalance removed from both files: internally consistent, but not the anchor state",
+			func(leaves []leaf) []leaf {
+				for _, key := range [][]byte{bintrie.BasicDataKey(eoaBalance), bintrie.CodeHashKey(eoaBalance)} {
+					i := findKey(leaves, key)
+					leaves = slices.Delete(leaves, i, i+1)
+				}
+				return leaves
+			}),
+			dropRecord(eoaBalance)),
 
-		// --- clauses the EIP leaves open --------------------------------
+		// Open in the EIP: run and reported, never scored.
 		{
-			id: "snapshot/empty", suite: "snapshot",
-			clause: "unspecified.empty-snapshot", expect: "unspecified",
-			note:    "leafCount 0: the reference converter refuses it, the EIP does not say",
-			rawSnap: func(b []byte) []byte { return withCount(bytes.Clone(b)[:snapshotHeaderSize], 0) },
-		},
-		{
-			id: "snapshot/reserved-header-subindex", suite: "snapshot",
-			clause: "unspecified.header-subindex-gap", expect: "unspecified",
-			note: "a leaf at header sub-index 3, in the gap between delegation and storage",
-			snapshot: func(leaves []leaf) []leaf {
-				return insertSorted(leaves, leaf{key: bintrie.HeaderKey(eoaBalance, 3), value: oneValue})
-			},
-		},
-		{
-			id: "snapshot/codeless-account-without-code-hash", suite: "snapshot",
-			clause: "unspecified.codehash-leaf-required", expect: "unspecified",
-			note: "an account with no code drops its code-hash leaf, which a verifier may infer",
-			snapshot: func(leaves []leaf) []leaf {
-				i := findKey(leaves, bintrie.CodeHashKey(eoaBalance))
-				return slices.Delete(leaves, i, i+1)
-			},
-		},
-		{
-			id: "preimages/storage-less-record-absent", suite: "preimages",
-			clause: "unspecified.slotcount-zero-record", expect: "unspecified",
-			note:      "an account with no storage is left out of the file entirely",
-			preimages: func(recs []record) []record { return deleteRecord(recs, precompile) },
+			id: "snapshot/empty", suite: "snapshot", clause: "unspecified.empty-snapshot", expect: "unspecified",
+			note:    "leafCount 0 under the empty-tree root",
+			rawSnap: func([]byte) []byte { return make([]byte, snapshotHeaderSize) },
 		},
 	}
-}
-
-// encodeRecordsVerbatim writes the records in the order given, without the
-// sort the valid encoder applies, so a case can put them out of order. An
-// optional hook reorders each record's slots the same way.
-func encodeRecordsVerbatim(recs []record, slotOrder func([]common.Hash) []common.Hash) []byte {
-	var buf bytes.Buffer
-	for _, r := range recs {
-		slots := r.slots
-		if slotOrder != nil {
-			slots = slotOrder(slots)
-		}
-		buf.Write(r.addr[:])
-		buf.Write(binary.BigEndian.AppendUint32(nil, uint32(len(slots))))
-		for _, s := range slots {
-			buf.Write(s[:])
-		}
-	}
-	return buf.Bytes()
 }
 
 func deleteRecord(recs []record, addr common.Address) []record {
 	return slices.DeleteFunc(recs, func(r record) bool { return r.addr == addr })
 }
 
-// withCount rewrites the header's leaf count.
 func withCount(b []byte, count uint64) []byte {
 	out := bytes.Clone(b)
 	binary.BigEndian.PutUint64(out[32:snapshotHeaderSize], count)
 	return out
 }
 
-// padFirstValue re-encodes the first record with a leading zero byte in its
-// value, an encoding the writers can never emit.
-func padFirstValue(b []byte) []byte {
+// reencodeFirst rewrites the first record with a value the writers cannot
+// emit, leaving every other record and the header as they were.
+func reencodeFirst(b []byte, value func([]byte) []byte) []byte {
+	return reencodeFirstRaw(b, func(k, v []byte) []byte { return mustRLP(k, value(v)) })
+}
+
+// reencodeFirstRaw rewrites the first record's bytes wholesale.
+func reencodeFirstRaw(b []byte, rec func(key, value []byte) []byte) []byte {
 	root, leaves, err := decodeSnapshot(b)
 	if err != nil {
 		panic(err)
@@ -460,15 +320,10 @@ func padFirstValue(b []byte) []byte {
 	buf.Write(binary.BigEndian.AppendUint64(nil, uint64(len(leaves))))
 	for i, l := range leaves {
 		if i == 0 {
-			padded := append([]byte{0x00}, common.TrimLeftZeroes(l.value[:])...)
-			buf.Write(mustRLP(l.key, padded))
+			buf.Write(rec(l.key, common.TrimLeftZeroes(l.value[:])))
 			continue
 		}
 		buf.Write(encodeLeaf(l))
 	}
 	return buf.Bytes()
-}
-
-func emptyCodeHash() [32]byte {
-	return [32]byte(crypto.Keccak256(nil))
 }

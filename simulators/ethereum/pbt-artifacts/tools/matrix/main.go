@@ -14,17 +14,13 @@ import (
 	"strings"
 )
 
-// absent are the clients that cannot appear in a run because they have no
-// EIP-8297/8347 branch to pin. They belong in the matrix as a stated gap
-// rather than as a silent omission.
+// absent are clients with no PBT branch to pin, listed so the gap is stated
+// rather than silent.
 var absent = map[string]string{
-	"reth": "no PBT branch: no EIP-8297/8347 work found in paradigmxyz/reth",
+	"reth": "no PBT branch",
 }
 
-// columns are the verbs, in the order the migration needs them. Consume and
-// produce are split per artifact: no client does all four, and collapsing
-// them hides the asymmetry that matters, such as erigon producing the
-// preimage file while reading neither artifact.
+// columns are split per artifact: no client does all four.
 var columns = []struct{ key, header string }{
 	{"genesis_root", "anchor state"},
 	{"verify_preimages", "consume preimages"},
@@ -61,12 +57,8 @@ func main() {
 	render(os.Stdout, rows, failures, agreement)
 }
 
-// collect reads every suite file in dir and pulls out the per-client matrix
-// rows the simulator published, plus the names of the cases that failed.
-//
-// A logs directory accumulates runs, and a client's older run says nothing
-// about its current state, so the newest run that mentions a client replaces
-// everything an older one said about it.
+// collect reads every suite file in dir. The newest run mentioning a client
+// replaces whatever an older one said about it.
 func collect(dir string) (map[string]map[string]string, map[string][]string, map[string]string, error) {
 	entries, err := filepath.Glob(filepath.Join(dir, "*.json"))
 	if err != nil {
@@ -97,8 +89,6 @@ func collect(dir string) (map[string]map[string]string, map[string][]string, map
 		if err := json.Unmarshal(blob, &suite); err != nil || suite.Name != "pbt-artifacts" {
 			continue
 		}
-		// The per-case log offsets index the details log, not the simulator's
-		// own output.
 		details, err := os.ReadFile(filepath.Join(dir, suite.TestDetailsLog))
 		if err != nil {
 			details = nil
@@ -110,8 +100,6 @@ func collect(dir string) (map[string]map[string]string, map[string][]string, map
 		)
 		for _, tc := range suite.TestCases {
 			name := tc.Name
-			// The agreement cases are the run's own verdict rather than any
-			// client's, so they are keyed by artifact and kept out of the table.
 			if artifact, ok := strings.CutPrefix(name, "agreement/"); ok {
 				verdict := strings.TrimSpace(slice(details, tc.SummaryResult.Log.Begin, tc.SummaryResult.Log.End))
 				if verdict == "" {
@@ -170,9 +158,8 @@ func parseRow(text string) (string, map[string]string) {
 			if !ok {
 				continue
 			}
-			v = strings.ReplaceAll(v, "-", " ")
 			if k == "client" {
-				client = strings.ReplaceAll(v, " ", "-")
+				client = v
 				continue
 			}
 			fields[k] = v
@@ -225,8 +212,6 @@ func render(out *os.File, rows map[string]map[string]string, failures map[string
 		fmt.Fprintln(out, line)
 	}
 
-	// Agreement belongs under the table rather than in it: it is a property of
-	// the producers as a set, not of any one client.
 	if len(agreement) > 0 {
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, "## Producer agreement")
