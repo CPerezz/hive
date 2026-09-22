@@ -65,12 +65,14 @@ func mutations(valid *artifacts) []mutation {
 				}
 				return recs
 			})),
-		verbatim(preimages("duplicate-address", "preimage.address-appears-once", "one account twice, adjacent",
-			func(recs []record) []record { return slices.Insert(recs, 1, recs[0]) })),
-		verbatim(preimages("duplicate-slot", "preimage.no-duplicate-slots", "one slot twice, adjacent",
+		verbatim(preimages("duplicate-address", "preimage.address-appears-once",
+			"record 1 repeated in place; a strict-ascent check reports the equal key as out of order, which is the same clause read the other way",
+			func(recs []record) []record { return slices.Insert(recs, 2, recs[1]) })),
+		verbatim(preimages("duplicate-slot", "preimage.no-duplicate-slots",
+			"storageSpread's second slot repeated in place",
 			func(recs []record) []record {
 				i := findRecord(recs, storageSpread)
-				recs[i].slots = slices.Insert(recs[i].slots, 1, recs[i].slots[0])
+				recs[i].slots = slices.Insert(recs[i].slots, 2, recs[i].slots[1])
 				return recs
 			})),
 		preimages("missing-account", "converter.preimage-set-matches-leaves", "", dropRecord(eoaBalance)),
@@ -118,9 +120,10 @@ func mutations(valid *artifacts) []mutation {
 				leaves[i], leaves[i+1] = leaves[i+1], leaves[i]
 				return leaves
 			})),
-		keep(snapshot("duplicate-key", "snapshot.ascending-key-order", "",
+		keep(snapshot("duplicate-key", "snapshot.ascending-key-order",
+			"eoaBalance's code-hash leaf repeated in place: equal keys are not strictly ascending",
 			func(leaves []leaf) []leaf {
-				i := findKey(leaves, bintrie.BasicDataKey(eoaBalance))
+				i := findKey(leaves, bintrie.CodeHashKey(eoaBalance))
 				return slices.Insert(leaves, i+1, leaves[i])
 			})),
 		keep(snapshot("reserved-zone", "snapshot.zone-byte", "eoaBalance's basic-data key in zone 0x02",

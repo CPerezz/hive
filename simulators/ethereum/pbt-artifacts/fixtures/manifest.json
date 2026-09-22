@@ -73,7 +73,7 @@
       "preimages": "preimages/duplicate-address/preimages.bin",
       "expect": "reject",
       "clause": "preimage.address-appears-once",
-      "note": "one account twice, adjacent"
+      "note": "record 1 repeated in place; a strict-ascent check reports the equal key as out of order, which is the same clause read the other way"
     },
     {
       "id": "preimages/duplicate-slot",
@@ -82,7 +82,7 @@
       "preimages": "preimages/duplicate-slot/preimages.bin",
       "expect": "reject",
       "clause": "preimage.no-duplicate-slots",
-      "note": "one slot twice, adjacent"
+      "note": "storageSpread's second slot repeated in place"
     },
     {
       "id": "preimages/missing-account",
@@ -199,7 +199,8 @@
       "snapshot": "snapshot/duplicate-key/snapshot.bin",
       "preimages": "valid/preimages.bin",
       "expect": "reject",
-      "clause": "snapshot.ascending-key-order"
+      "clause": "snapshot.ascending-key-order",
+      "note": "eoaBalance's code-hash leaf repeated in place: equal keys are not strictly ascending"
     },
     {
       "id": "snapshot/reserved-zone",
