@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -30,13 +31,14 @@ type manifest struct {
 }
 
 type testCase struct {
-	ID        string `json:"id"`
-	Suite     string `json:"suite"`
-	Snapshot  string `json:"snapshot"`
-	Preimages string `json:"preimages"`
-	Expect    string `json:"expect"`
-	Clause    string `json:"clause"`
-	Note      string `json:"note,omitempty"`
+	ID        string  `json:"id"`
+	Suite     string  `json:"suite"`
+	Snapshot  string  `json:"snapshot"`
+	Preimages string  `json:"preimages"`
+	Expect    string  `json:"expect"`
+	Clause    string  `json:"clause"`
+	Note      string  `json:"note,omitempty"`
+	Effect    *effect `json:"effect"`
 }
 
 const (
@@ -44,10 +46,65 @@ const (
 	expectUnspecified = "unspecified"
 )
 
+// effect is what a case changed against the valid pair, as fixtures/gen
+// computed it from the bytes it wrote. It is what the case is scored on:
+// nothing here comes from a client's error text. The generator declares the
+// same shape; the two are separate because it is its own module.
+type effect struct {
+	Snapshot  *fileEffect `json:"snapshot,omitempty"`
+	Preimages *fileEffect `json:"preimages,omitempty"`
+}
+
+type fileEffect struct {
+	ValidLen  int      `json:"validLen"`
+	CaseLen   int      `json:"caseLen"`
+	FirstDiff int      `json:"firstDiff"`
+	Parses    bool     `json:"parses"`
+	Added     []string `json:"added,omitempty"`
+	Removed   []string `json:"removed,omitempty"`
+	Changed   []string `json:"changed,omitempty"`
+	Reordered bool     `json:"reordered,omitempty"`
+	RootKept  bool     `json:"rootKept,omitempty"`
+	Claimed   int      `json:"claimed,omitempty"`
+}
+
+func (f *fileEffect) String() string {
+	s := fmt.Sprintf("%d -> %d bytes, first differs at %d", f.ValidLen, f.CaseLen, f.FirstDiff)
+	if !f.Parses {
+		s += ", no longer parses"
+	}
+	for _, l := range []struct {
+		label string
+		list  []string
+	}{{"added", f.Added}, {"removed", f.Removed}, {"changed", f.Changed}} {
+		if len(l.list) > 0 {
+			s += "; " + l.label + " " + strings.Join(l.list, " ")
+		}
+	}
+	if f.Reordered {
+		s += "; reordered"
+	}
+	if f.RootKept {
+		s += "; root kept"
+	}
+	if f.Claimed != 0 {
+		s += fmt.Sprintf("; header claims %d", f.Claimed)
+	}
+	return s
+}
+
 func (tc testCase) describe() string {
 	s := fmt.Sprintf("Clause: %s (%s)", tc.Clause, tc.Expect)
 	if tc.Note != "" {
 		s += "\n" + tc.Note
+	}
+	if tc.Effect != nil {
+		if f := tc.Effect.Snapshot; f != nil {
+			s += "\nsnapshot: " + f.String()
+		}
+		if f := tc.Effect.Preimages; f != nil {
+			s += "\npreimages: " + f.String()
+		}
 	}
 	return s
 }
@@ -92,6 +149,22 @@ func loadManifest(dir string) (*manifest, error) {
 		if got := m.digests[f.path]; got != common.HexToHash(f.want).Hex() {
 			return nil, fmt.Errorf("%s hashes to %s, the manifest names %s", f.path, got, f.want)
 		}
+	}
+	// Scoring is structural: a set that records no effect, or records one
+	// twice, cannot say what a rejection was for.
+	byEffect := make(map[string]string, len(m.Cases))
+	for _, tc := range m.Cases {
+		if tc.Effect == nil || (tc.Effect.Snapshot == nil && tc.Effect.Preimages == nil) {
+			return nil, fmt.Errorf("case %s records no effect: regenerate the fixtures", tc.ID)
+		}
+		key, err := json.Marshal(tc.Effect)
+		if err != nil {
+			return nil, err
+		}
+		if prev, dup := byEffect[string(key)]; dup {
+			return nil, fmt.Errorf("cases %s and %s record the same effect: they are the same fixture twice", prev, tc.ID)
+		}
+		byEffect[string(key)] = tc.ID
 	}
 	return m, nil
 }

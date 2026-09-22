@@ -56,15 +56,18 @@ func longFormPair(key, value []byte) []byte {
 	return append([]byte{0xf8, byte(len(body))}, body...)
 }
 
-func decodeSnapshot(blob []byte) (common.Hash, []leaf, error) {
+// decodeSnapshotLoose parses what the bytes allow: the header when it is
+// present, then leaves until they stop decoding. It returns what it read
+// alongside the error that stopped it, so a file that is malformed on
+// purpose still yields a diffable shape.
+func decodeSnapshotLoose(blob []byte) (root common.Hash, claimed uint64, leaves []leaf, err error) {
 	if len(blob) < snapshotHeaderSize {
-		return common.Hash{}, nil, fmt.Errorf("snapshot is %d bytes, shorter than its header", len(blob))
+		return root, claimed, leaves, fmt.Errorf("snapshot is %d bytes, shorter than its header", len(blob))
 	}
-	root := common.BytesToHash(blob[:32])
-	count := binary.BigEndian.Uint64(blob[32:snapshotHeaderSize])
+	root = common.BytesToHash(blob[:32])
+	claimed = binary.BigEndian.Uint64(blob[32:snapshotHeaderSize])
 
 	stream := rlp.NewStream(bytes.NewReader(blob[snapshotHeaderSize:]), uint64(len(blob)))
-	var leaves []leaf
 	for {
 		var rec struct {
 			Key   []byte
@@ -73,29 +76,42 @@ func decodeSnapshot(blob []byte) (common.Hash, []leaf, error) {
 		if err := stream.Decode(&rec); err == io.EOF {
 			break
 		} else if err != nil {
-			return common.Hash{}, nil, fmt.Errorf("record %d: %w", len(leaves), err)
+			return root, claimed, leaves, fmt.Errorf("record %d: %w", len(leaves), err)
+		}
+		if len(rec.Value) > 32 {
+			return root, claimed, leaves, fmt.Errorf("record %d: value is %d bytes", len(leaves), len(rec.Value))
 		}
 		var value [32]byte
 		copy(value[32-len(rec.Value):], rec.Value)
 		leaves = append(leaves, leaf{key: rec.Key, value: value})
 	}
-	if uint64(len(leaves)) != count {
-		return common.Hash{}, nil, fmt.Errorf("header claims %d leaves, the file holds %d", count, len(leaves))
+	return root, claimed, leaves, nil
+}
+
+func decodeSnapshot(blob []byte) (common.Hash, []leaf, error) {
+	root, claimed, leaves, err := decodeSnapshotLoose(blob)
+	if err != nil {
+		return common.Hash{}, nil, err
+	}
+	if uint64(len(leaves)) != claimed {
+		return common.Hash{}, nil, fmt.Errorf("header claims %d leaves, the file holds %d", claimed, len(leaves))
 	}
 	return root, leaves, nil
 }
 
-func decodePreimages(blob []byte) ([]record, error) {
+// decodePreimagesLoose parses records until the bytes stop making sense,
+// returning those it read alongside the error that stopped it.
+func decodePreimagesLoose(blob []byte) ([]record, error) {
 	var recs []record
 	for len(blob) > 0 {
 		if len(blob) < preimageRecordHeaderSize {
-			return nil, fmt.Errorf("record %d is truncated", len(recs))
+			return recs, fmt.Errorf("record %d is truncated", len(recs))
 		}
 		addr := common.BytesToAddress(blob[:common.AddressLength])
 		count := int(binary.BigEndian.Uint32(blob[common.AddressLength:preimageRecordHeaderSize]))
 		blob = blob[preimageRecordHeaderSize:]
 		if len(blob) < count*common.HashLength {
-			return nil, fmt.Errorf("record %x claims %d slots, %d bytes remain", addr, count, len(blob))
+			return recs, fmt.Errorf("record %x claims %d slots, %d bytes remain", addr, count, len(blob))
 		}
 		slots := make([]common.Hash, count)
 		for i := range slots {
@@ -103,6 +119,14 @@ func decodePreimages(blob []byte) ([]record, error) {
 			blob = blob[common.HashLength:]
 		}
 		recs = append(recs, record{addr: addr, slots: slots})
+	}
+	return recs, nil
+}
+
+func decodePreimages(blob []byte) ([]record, error) {
+	recs, err := decodePreimagesLoose(blob)
+	if err != nil {
+		return nil, err
 	}
 	return recs, nil
 }

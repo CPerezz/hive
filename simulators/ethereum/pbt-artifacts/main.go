@@ -4,7 +4,6 @@ package main
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -73,8 +72,7 @@ func runAllClients(t *hivesim.T, fixtures *manifest) {
 // client serializes shim execs: the verbs share one datadir.
 type client struct {
 	*hivesim.Client
-	mu      sync.Mutex
-	reasons map[string]*regexp.Regexp
+	mu sync.Mutex
 }
 
 func (c *client) run(verb string, args ...string) *hivesim.ExecInfo {
@@ -94,7 +92,7 @@ func (c *client) verify(fixtures *manifest, snapshot, preimages string) *hivesim
 }
 
 func runClient(t *hivesim.T, fixtures *manifest, ct *hivesim.ClientDefinition, producers *producerSet) {
-	shim, reasons := shimFor(ct.Name)
+	shim := shimFor(ct.Name)
 	files := map[string]string{
 		"/genesis.json":              filepath.Join(fixtureDir, fixtures.Genesis.File),
 		"/pbt-fixtures.tar":          fixtureTar,
@@ -102,8 +100,7 @@ func runClient(t *hivesim.T, fixtures *manifest, ct *hivesim.ClientDefinition, p
 		"/hive-bin/pbt-common.sh":    filepath.Join("shims", "common.sh"),
 	}
 	c := &client{
-		Client:  t.StartClient(ct.Name, hivesim.Params{"HIVE_LOGLEVEL": "3"}, hivesim.WithStaticFiles(files)),
-		reasons: reasons,
+		Client: t.StartClient(ct.Name, hivesim.Params{"HIVE_LOGLEVEL": "3"}, hivesim.WithStaticFiles(files)),
 	}
 	report := newReport(c.Type)
 	defer report.publish(t)
@@ -184,7 +181,7 @@ func runVerifySuite(t *hivesim.T, c *client, fixtures *manifest, report *report,
 		return
 	}
 
-	var scored, passed, attributed int
+	var scored, passed int
 	for _, tc := range cases {
 		t.Run(hivesim.TestSpec{
 			Name:        fmt.Sprintf("%s/%s", c.Type, tc.ID),
@@ -202,14 +199,6 @@ func runVerifySuite(t *hivesim.T, c *client, fixtures *manifest, report *report,
 						t.Fatalf("rejected without saying why")
 					}
 					passed++
-					switch re := c.reasons[tc.ID]; {
-					case re == nil:
-						t.Logf("rejected, reason not attributed for this client")
-					case re.MatchString(info.Stderr):
-						attributed++
-					default:
-						t.Fatalf("rejected for another reason than %s: want /%s/\n%s", tc.Clause, re, info.Stderr)
-					}
 				case exitAccept:
 					t.Fatalf("accepted an artifact that breaks %s", tc.Clause)
 				case exitUnsupported:
@@ -220,11 +209,7 @@ func runVerifySuite(t *hivesim.T, c *client, fixtures *manifest, report *report,
 			},
 		})
 	}
-	if len(c.reasons) == 0 {
-		report.set(key, fmt.Sprintf("%d/%d", passed, scored))
-		return
-	}
-	report.set(key, fmt.Sprintf("%d/%d(%d-attributed)", passed, scored, attributed))
+	report.set(key, fmt.Sprintf("%d/%d", passed, scored))
 }
 
 // runConvert measures the production leg per artifact: a client may produce
@@ -407,38 +392,19 @@ func (r *report) publish(t *hivesim.T) {
 	})
 }
 
-// shimFor returns the shim for a client and its rejection reasons. Hive
-// names a client <client>_<nametag> once build arguments are in play, so the
-// base name is tried too. A client with no shim gets the generic one, which
-// reports every verb unsupported.
-func shimFor(clientName string) (string, map[string]*regexp.Regexp) {
+// shimFor returns the shim for a client. Hive names a client
+// <client>_<nametag> once build arguments are in play, so the base name is
+// tried too. A client with no shim gets the generic one, which reports every
+// verb unsupported.
+func shimFor(clientName string) string {
 	for _, name := range []string{clientName, strings.SplitN(clientName, "_", 2)[0]} {
 		path := filepath.Join("shims", name+".sh")
 		if _, err := os.Stat(path); err != nil {
 			continue
 		}
-		return path, loadReasons(filepath.Join("shims", name+".reasons.json"))
+		return path
 	}
-	return filepath.Join("shims", "unsupported.sh"), nil
-}
-
-// loadReasons reads a client's per-case stderr patterns; absent means the
-// client's rejections are counted but not attributed.
-func loadReasons(path string) map[string]*regexp.Regexp {
-	blob, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	var raw map[string]string
-	if err := json.Unmarshal(blob, &raw); err != nil {
-		panic(fmt.Sprintf("%s: %v", path, err))
-	}
-	reasons := make(map[string]*regexp.Regexp, len(raw))
-	for id, pattern := range raw {
-		// Line-anchored, as grep reads them: the same file drives validate.sh.
-		reasons[id] = regexp.MustCompile("(?m)" + pattern)
-	}
-	return reasons
+	return filepath.Join("shims", "unsupported.sh")
 }
 
 func match(re *regexp.Regexp, out string) string {

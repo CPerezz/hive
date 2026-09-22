@@ -219,14 +219,19 @@ func writeCases(outDir string, valid *artifacts) ([]caseEntry, error) {
 			return nil, fmt.Errorf("case %s shapes nothing", m.id)
 		}
 		changed := false
+		var eff effect
 		for _, f := range []struct {
-			blob  []byte
-			valid string
-			name  string
-			field *string
+			blob    []byte
+			valid   string
+			name    string
+			field   *string
+			into    **fileEffect
+			compute func(validBlob, caseBlob []byte) *fileEffect
 		}{
-			{snap, valid.snapshotFD, "snapshot.bin", &entry.Snapshot},
-			{pre, valid.preimageFD, "preimages.bin", &entry.Preimages},
+			{snap, valid.snapshotFD, "snapshot.bin", &entry.Snapshot, &eff.Snapshot, func(v, c []byte) *fileEffect {
+				return snapshotEffect(v, c, valid.root)
+			}},
+			{pre, valid.preimageFD, "preimages.bin", &entry.Preimages, &eff.Preimages, preimageEffect},
 		} {
 			if f.blob == nil {
 				continue
@@ -236,11 +241,14 @@ func writeCases(outDir string, valid *artifacts) ([]caseEntry, error) {
 				return nil, err
 			}
 			*f.field = rel(outDir, path)
-			changed = changed || !bytes.Equal(f.blob, mustRead(f.valid))
+			validBlob := mustRead(f.valid)
+			changed = changed || !bytes.Equal(f.blob, validBlob)
+			*f.into = f.compute(validBlob, f.blob)
 		}
 		if !changed {
 			return nil, fmt.Errorf("case %s produced the valid files unchanged", m.id)
 		}
+		entry.Effect = &eff
 		entries = append(entries, entry)
 	}
 	return entries, nil
@@ -279,13 +287,14 @@ func cloneRecords(in []record) []record {
 }
 
 type caseEntry struct {
-	ID        string `json:"id"`
-	Suite     string `json:"suite"`
-	Snapshot  string `json:"snapshot"`
-	Preimages string `json:"preimages"`
-	Expect    string `json:"expect"`
-	Clause    string `json:"clause"`
-	Note      string `json:"note,omitempty"`
+	ID        string  `json:"id"`
+	Suite     string  `json:"suite"`
+	Snapshot  string  `json:"snapshot"`
+	Preimages string  `json:"preimages"`
+	Expect    string  `json:"expect"`
+	Clause    string  `json:"clause"`
+	Note      string  `json:"note,omitempty"`
+	Effect    *effect `json:"effect"`
 }
 
 type manifest struct {
@@ -346,7 +355,7 @@ func writeManifest(outDir, genesisPath string, valid *artifacts, cases []caseEnt
 	if err != nil {
 		return err
 	}
-	fmt.Printf("manifest: %d cases\n", len(cases))
+	fmt.Printf("manifest: %d cases, %d distinct effects\n", len(cases), distinctEffects(cases))
 	return os.WriteFile(filepath.Join(outDir, "manifest.json"), append(blob, '\n'), 0644)
 }
 

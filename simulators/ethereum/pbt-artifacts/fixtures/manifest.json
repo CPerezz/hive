@@ -28,7 +28,15 @@
       "snapshot": "valid/snapshot.bin",
       "preimages": "preimages/trailing-byte/preimages.bin",
       "expect": "reject",
-      "clause": "preimage.no-trailing-bytes"
+      "clause": "preimage.no-trailing-bytes",
+      "effect": {
+        "preimages": {
+          "validLen": 1472,
+          "caseLen": 1473,
+          "firstDiff": 1472,
+          "parses": false
+        }
+      }
     },
     {
       "id": "preimages/truncated-record",
@@ -37,7 +45,19 @@
       "preimages": "preimages/truncated-record/preimages.bin",
       "expect": "reject",
       "clause": "preimage.record-self-delimiting",
-      "note": "the file ends inside a slot key"
+      "note": "the file ends inside a slot key",
+      "effect": {
+        "preimages": {
+          "validLen": 1472,
+          "caseLen": 1447,
+          "firstDiff": 1447,
+          "parses": false,
+          "removed": [
+            "0000000000000000000000000000000000000502:77f673054f2c046e",
+            "000000000000000000000000000000000000020e:e3b0c44298fc1c14"
+          ]
+        }
+      }
     },
     {
       "id": "preimages/slot-count-huge",
@@ -46,7 +66,21 @@
       "preimages": "preimages/slot-count-huge/preimages.bin",
       "expect": "reject",
       "clause": "preimage.record-self-delimiting",
-      "note": "the first record claims 2^32-1 slots"
+      "note": "the first record claims 2^32-1 slots",
+      "effect": {
+        "preimages": {
+          "validLen": 1472,
+          "caseLen": 1472,
+          "firstDiff": 20,
+          "parses": false,
+          "removed": [
+            "0000000000000000000000000000000000000402:e3b0c44298fc1c14",
+            "000000000000000000000000000000000000020c:e3b0c44298fc1c14",
+            "0000000000000000000000000000000000000404:e3b0c44298fc1c14",
+            "000000000000000000000000000000000000020b:e3b0c44298fc1c14"
+          ]
+        }
+      }
     },
     {
       "id": "preimages/raw-address-order",
@@ -55,7 +89,16 @@
       "preimages": "preimages/raw-address-order/preimages.bin",
       "expect": "reject",
       "clause": "preimage.hashed-key-order",
-      "note": "sorted by raw address"
+      "note": "sorted by raw address",
+      "effect": {
+        "preimages": {
+          "validLen": 1472,
+          "caseLen": 1472,
+          "firstDiff": 18,
+          "parses": true,
+          "reordered": true
+        }
+      }
     },
     {
       "id": "preimages/raw-slot-order",
@@ -64,7 +107,20 @@
       "preimages": "preimages/raw-slot-order/preimages.bin",
       "expect": "reject",
       "clause": "preimage.hashed-key-order",
-      "note": "slots sorted by number"
+      "note": "slots sorted by number",
+      "effect": {
+        "preimages": {
+          "validLen": 1472,
+          "caseLen": 1472,
+          "firstDiff": 326,
+          "parses": true,
+          "changed": [
+            "0000000000000000000000000000000000000501:cbb5b07db1aa8a32",
+            "0000000000000000000000000000000000000403:2a30e8ea70a33b71",
+            "0000000000000000000000000000000000000502:522ea4bfbb7dd489"
+          ]
+        }
+      }
     },
     {
       "id": "preimages/duplicate-address",
@@ -73,7 +129,16 @@
       "preimages": "preimages/duplicate-address/preimages.bin",
       "expect": "reject",
       "clause": "preimage.address-appears-once",
-      "note": "record 1 repeated in place; a strict-ascent check reports the equal key as out of order, which is the same clause read the other way"
+      "note": "record 1 repeated in place; a strict-ascent check reports the equal key as out of order, which is the same clause read the other way",
+      "effect": {
+        "preimages": {
+          "validLen": 1472,
+          "caseLen": 1496,
+          "firstDiff": 66,
+          "parses": true,
+          "reordered": true
+        }
+      }
     },
     {
       "id": "preimages/duplicate-slot",
@@ -82,7 +147,18 @@
       "preimages": "preimages/duplicate-slot/preimages.bin",
       "expect": "reject",
       "clause": "preimage.no-duplicate-slots",
-      "note": "storageSpread's second slot repeated in place"
+      "note": "storageSpread's second slot repeated in place",
+      "effect": {
+        "preimages": {
+          "validLen": 1472,
+          "caseLen": 1504,
+          "firstDiff": 295,
+          "parses": true,
+          "changed": [
+            "0000000000000000000000000000000000000501:23a1bdd8b0494c1f"
+          ]
+        }
+      }
     },
     {
       "id": "preimages/missing-account",
@@ -90,7 +166,18 @@
       "snapshot": "valid/snapshot.bin",
       "preimages": "preimages/missing-account/preimages.bin",
       "expect": "reject",
-      "clause": "converter.preimage-set-matches-leaves"
+      "clause": "converter.preimage-set-matches-leaves",
+      "effect": {
+        "preimages": {
+          "validLen": 1472,
+          "caseLen": 1448,
+          "firstDiff": 186,
+          "parses": true,
+          "removed": [
+            "0000000000000000000000000000000000000101:e3b0c44298fc1c14"
+          ]
+        }
+      }
     },
     {
       "id": "preimages/surplus-account",
@@ -98,7 +185,18 @@
       "snapshot": "valid/snapshot.bin",
       "preimages": "preimages/surplus-account/preimages.bin",
       "expect": "reject",
-      "clause": "converter.preimage-set-matches-leaves"
+      "clause": "converter.preimage-set-matches-leaves",
+      "effect": {
+        "preimages": {
+          "validLen": 1472,
+          "caseLen": 1496,
+          "firstDiff": 1128,
+          "parses": true,
+          "added": [
+            "00000000000000000000000000000000deadbeef:e3b0c44298fc1c14"
+          ]
+        }
+      }
     },
     {
       "id": "preimages/missing-header-slot",
@@ -107,7 +205,18 @@
       "preimages": "preimages/missing-header-slot/preimages.bin",
       "expect": "reject",
       "clause": "converter.preimage-set-matches-leaves",
-      "note": "slot 63 of storageSpread"
+      "note": "slot 63 of storageSpread",
+      "effect": {
+        "preimages": {
+          "validLen": 1472,
+          "caseLen": 1440,
+          "firstDiff": 295,
+          "parses": true,
+          "changed": [
+            "0000000000000000000000000000000000000501:5b91c72834c44362"
+          ]
+        }
+      }
     },
     {
       "id": "preimages/surplus-header-slot",
@@ -116,7 +225,18 @@
       "preimages": "preimages/surplus-header-slot/preimages.bin",
       "expect": "reject",
       "clause": "converter.preimage-set-matches-leaves",
-      "note": "slot 7 of storageSpread"
+      "note": "slot 7 of storageSpread",
+      "effect": {
+        "preimages": {
+          "validLen": 1472,
+          "caseLen": 1504,
+          "firstDiff": 295,
+          "parses": true,
+          "changed": [
+            "0000000000000000000000000000000000000501:481016c287959621"
+          ]
+        }
+      }
     },
     {
       "id": "preimages/missing-overflow-slot",
@@ -125,7 +245,18 @@
       "preimages": "preimages/missing-overflow-slot/preimages.bin",
       "expect": "reject",
       "clause": "converter.preimage-set-matches-leaves",
-      "note": "slot 256 of storageSpread; its stem is a one-way hash, so the leaf can never be keyed"
+      "note": "slot 256 of storageSpread; its stem is a one-way hash, so the leaf can never be keyed",
+      "effect": {
+        "preimages": {
+          "validLen": 1472,
+          "caseLen": 1440,
+          "firstDiff": 295,
+          "parses": true,
+          "changed": [
+            "0000000000000000000000000000000000000501:fae19bf632c7f5fc"
+          ]
+        }
+      }
     },
     {
       "id": "preimages/empty-file",
@@ -133,7 +264,21 @@
       "snapshot": "valid/snapshot.bin",
       "preimages": "preimages/empty-file/preimages.bin",
       "expect": "reject",
-      "clause": "converter.preimage-set-matches-leaves"
+      "clause": "converter.preimage-set-matches-leaves",
+      "effect": {
+        "preimages": {
+          "validLen": 1472,
+          "caseLen": 0,
+          "firstDiff": 0,
+          "parses": true,
+          "removed": [
+            "0000000000000000000000000000000000000402:e3b0c44298fc1c14",
+            "000000000000000000000000000000000000020c:e3b0c44298fc1c14",
+            "0000000000000000000000000000000000000404:e3b0c44298fc1c14",
+            "000000000000000000000000000000000000020b:e3b0c44298fc1c14"
+          ]
+        }
+      }
     },
     {
       "id": "preimages/slot-on-wrong-account",
@@ -142,7 +287,19 @@
       "preimages": "preimages/slot-on-wrong-account/preimages.bin",
       "expect": "reject",
       "clause": "converter.preimage-set-matches-leaves",
-      "note": "storageSpread's slot 64 named under storageValues: the set is intact, the binding is not"
+      "note": "storageSpread's slot 64 named under storageValues: the set is intact, the binding is not",
+      "effect": {
+        "preimages": {
+          "validLen": 1472,
+          "caseLen": 1472,
+          "firstDiff": 295,
+          "parses": true,
+          "changed": [
+            "0000000000000000000000000000000000000501:8c46df5d1338c377",
+            "0000000000000000000000000000000000000502:fad64028c55f718a"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/wrong-claimed-root",
@@ -150,7 +307,15 @@
       "snapshot": "snapshot/wrong-claimed-root/snapshot.bin",
       "preimages": "valid/preimages.bin",
       "expect": "reject",
-      "clause": "snapshot.root-recomputed"
+      "clause": "snapshot.root-recomputed",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24559,
+          "firstDiff": 31,
+          "parses": true
+        }
+      }
     },
     {
       "id": "snapshot/leaf-count-high",
@@ -158,7 +323,16 @@
       "snapshot": "snapshot/leaf-count-high/snapshot.bin",
       "preimages": "valid/preimages.bin",
       "expect": "reject",
-      "clause": "snapshot.leaf-count-recomputed"
+      "clause": "snapshot.leaf-count-recomputed",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24559,
+          "firstDiff": 39,
+          "parses": true,
+          "claimed": 364
+        }
+      }
     },
     {
       "id": "snapshot/leaf-count-low",
@@ -166,7 +340,16 @@
       "snapshot": "snapshot/leaf-count-low/snapshot.bin",
       "preimages": "valid/preimages.bin",
       "expect": "reject",
-      "clause": "snapshot.leaf-count-recomputed"
+      "clause": "snapshot.leaf-count-recomputed",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24559,
+          "firstDiff": 39,
+          "parses": true,
+          "claimed": 362
+        }
+      }
     },
     {
       "id": "snapshot/leaf-count-huge",
@@ -175,7 +358,16 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "snapshot.leaf-count-recomputed",
-      "note": "2^62 leaves claimed over the valid body"
+      "note": "2^62 leaves claimed over the valid body",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24559,
+          "firstDiff": 32,
+          "parses": true,
+          "claimed": 4611686018427387904
+        }
+      }
     },
     {
       "id": "snapshot/truncated-stream",
@@ -183,7 +375,20 @@
       "snapshot": "snapshot/truncated-stream/snapshot.bin",
       "preimages": "valid/preimages.bin",
       "expect": "reject",
-      "clause": "snapshot.record-self-delimiting"
+      "clause": "snapshot.record-self-delimiting",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24558,
+          "firstDiff": 24558,
+          "parses": false,
+          "removed": [
+            "ffff9369bab66563cd8aa7d9fb55e735bc20d6c209e09c5cde826f537a5c53bb1fda642e24bd60e7f2374bfaf25f871a7c1211109c37e9dcc2c466c3995de671462c=12"
+          ],
+          "rootKept": true,
+          "claimed": 363
+        }
+      }
     },
     {
       "id": "snapshot/trailing-garbage",
@@ -191,7 +396,15 @@
       "snapshot": "snapshot/trailing-garbage/snapshot.bin",
       "preimages": "valid/preimages.bin",
       "expect": "reject",
-      "clause": "snapshot.leaf-count-recomputed"
+      "clause": "snapshot.leaf-count-recomputed",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24561,
+          "firstDiff": 24559,
+          "parses": false
+        }
+      }
     },
     {
       "id": "snapshot/records-out-of-order",
@@ -200,7 +413,17 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "snapshot.ascending-key-order",
-      "note": "eoaBalance's first two leaves swapped"
+      "note": "eoaBalance's first two leaves swapped",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24559,
+          "firstDiff": 1932,
+          "parses": true,
+          "reordered": true,
+          "rootKept": true
+        }
+      }
     },
     {
       "id": "snapshot/duplicate-key",
@@ -209,7 +432,17 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "snapshot.ascending-key-order",
-      "note": "eoaBalance's code-hash leaf repeated in place: equal keys are not strictly ascending"
+      "note": "eoaBalance's code-hash leaf repeated in place: equal keys are not strictly ascending",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24629,
+          "firstDiff": 39,
+          "parses": true,
+          "reordered": true,
+          "rootKept": true
+        }
+      }
     },
     {
       "id": "snapshot/reserved-zone",
@@ -218,7 +451,22 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "snapshot.zone-byte",
-      "note": "eoaBalance's basic-data key in zone 0x02"
+      "note": "eoaBalance's basic-data key in zone 0x02",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24559,
+          "firstDiff": 1934,
+          "parses": true,
+          "added": [
+            "02625f16e92d4446e934d822637cb58ff949dca9742c9f82a05c1d2f736e6a87d700=0f4240"
+          ],
+          "removed": [
+            "00625f16e92d4446e934d822637cb58ff949dca9742c9f82a05c1d2f736e6a87d700=0f4240"
+          ],
+          "rootKept": true
+        }
+      }
     },
     {
       "id": "snapshot/wrong-key-length",
@@ -227,7 +475,22 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "snapshot.zone-fixes-key-length",
-      "note": "an account-zone key at storage-zone length"
+      "note": "an account-zone key at storage-zone length",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24593,
+          "firstDiff": 1932,
+          "parses": true,
+          "added": [
+            "00625f16e92d4446e934d822637cb58ff949dca9742c9f82a05c1d2f736e6a87d7000000000000000000000000000000000000000000000000000000000000000000=0f4240"
+          ],
+          "removed": [
+            "00625f16e92d4446e934d822637cb58ff949dca9742c9f82a05c1d2f736e6a87d700=0f4240"
+          ],
+          "rootKept": true
+        }
+      }
     },
     {
       "id": "snapshot/non-canonical-value",
@@ -236,7 +499,15 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "snapshot.canonical-integer-value",
-      "note": "a leading zero byte on the first value"
+      "note": "a leading zero byte on the first value",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24560,
+          "firstDiff": 41,
+          "parses": true
+        }
+      }
     },
     {
       "id": "snapshot/value-too-long",
@@ -245,7 +516,23 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "snapshot.canonical-integer-value",
-      "note": "a 33-byte value"
+      "note": "a 33-byte value",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24567,
+          "firstDiff": 41,
+          "parses": false,
+          "removed": [
+            "0024b3b4d16f572a5034fccf36fe217ee40a3fd10d2b7adb54594d72608bb66e9800=1f000000000000000000000000000000000000000000000001",
+            "0024b3b4d16f572a5034fccf36fe217ee40a3fd10d2b7adb54594d72608bb66e9801=a707f8a78fcde1950ab3f18ad1af0d120d7097919c5c7f80051cb151c161ea5c",
+            "0026c706f12ced4eba335fde6ff5d9d2455e4b0fb6e43e17a5086aa5b9cba3147300=18000000000000000000000000000000000000000000000001",
+            "0026c706f12ced4eba335fde6ff5d9d2455e4b0fb6e43e17a5086aa5b9cba3147301=d07ad01bcd0bba8e6b49e9a45b4d20d6bca9aebaff800b6e87b1cea7104c3d7b"
+          ],
+          "rootKept": true,
+          "claimed": 363
+        }
+      }
     },
     {
       "id": "snapshot/record-not-a-pair",
@@ -254,7 +541,23 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "snapshot.record-is-key-value-pair",
-      "note": "a one-item list"
+      "note": "a one-item list",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24532,
+          "firstDiff": 40,
+          "parses": false,
+          "removed": [
+            "0024b3b4d16f572a5034fccf36fe217ee40a3fd10d2b7adb54594d72608bb66e9800=1f000000000000000000000000000000000000000000000001",
+            "0024b3b4d16f572a5034fccf36fe217ee40a3fd10d2b7adb54594d72608bb66e9801=a707f8a78fcde1950ab3f18ad1af0d120d7097919c5c7f80051cb151c161ea5c",
+            "0026c706f12ced4eba335fde6ff5d9d2455e4b0fb6e43e17a5086aa5b9cba3147300=18000000000000000000000000000000000000000000000001",
+            "0026c706f12ced4eba335fde6ff5d9d2455e4b0fb6e43e17a5086aa5b9cba3147301=d07ad01bcd0bba8e6b49e9a45b4d20d6bca9aebaff800b6e87b1cea7104c3d7b"
+          ],
+          "rootKept": true,
+          "claimed": 363
+        }
+      }
     },
     {
       "id": "snapshot/non-canonical-rlp-length",
@@ -263,7 +566,23 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "snapshot.record-is-key-value-pair",
-      "note": "a long-form length prefix on a short string"
+      "note": "a long-form length prefix on a short string",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24560,
+          "firstDiff": 41,
+          "parses": false,
+          "removed": [
+            "0024b3b4d16f572a5034fccf36fe217ee40a3fd10d2b7adb54594d72608bb66e9800=1f000000000000000000000000000000000000000000000001",
+            "0024b3b4d16f572a5034fccf36fe217ee40a3fd10d2b7adb54594d72608bb66e9801=a707f8a78fcde1950ab3f18ad1af0d120d7097919c5c7f80051cb151c161ea5c",
+            "0026c706f12ced4eba335fde6ff5d9d2455e4b0fb6e43e17a5086aa5b9cba3147300=18000000000000000000000000000000000000000000000001",
+            "0026c706f12ced4eba335fde6ff5d9d2455e4b0fb6e43e17a5086aa5b9cba3147301=d07ad01bcd0bba8e6b49e9a45b4d20d6bca9aebaff800b6e87b1cea7104c3d7b"
+          ],
+          "rootKept": true,
+          "claimed": 363
+        }
+      }
     },
     {
       "id": "snapshot/zero-value-present",
@@ -272,7 +591,19 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "snapshot.no-zero-values",
-      "note": "slot 5 of storageSpread held as 32 zero bytes; no tree can commit to it, so the valid root stays"
+      "note": "slot 5 of storageSpread held as 32 zero bytes; no tree can commit to it, so the valid root stays",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24596,
+          "firstDiff": 39,
+          "parses": true,
+          "added": [
+            "003b2159c6e73ba3a2be5aeaafa747cf6d05c6396aa48678020031cf23cb55d24d45="
+          ],
+          "rootKept": true
+        }
+      }
     },
     {
       "id": "snapshot/flipped-value",
@@ -281,7 +612,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "verification.consensus-anchoring",
-      "note": "eoaBalance's balance, root recomputed"
+      "note": "eoaBalance's balance, root recomputed",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24559,
+          "firstDiff": 0,
+          "parses": true,
+          "changed": [
+            "00625f16e92d4446e934d822637cb58ff949dca9742c9f82a05c1d2f736e6a87d700=0f4241"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/delegation-target-changed",
@@ -290,7 +632,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "verification.consensus-anchoring",
-      "note": "one byte of delegatedA's target; the MPT code hash is keccak of the indicator, which check 2 must derive"
+      "note": "one byte of delegatedA's target; the MPT code hash is keccak of the indicator, which check 2 must derive",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24559,
+          "firstDiff": 0,
+          "parses": true,
+          "changed": [
+            "00467cf32ae19840b31b7fc73d1d0c690ed6224f2028dd39ca5aecaa647a072fd002=ef010000000000000000000000000000000000000004fe000000000000000000"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/nonzero-version",
@@ -298,7 +651,18 @@
       "snapshot": "snapshot/nonzero-version/snapshot.bin",
       "preimages": "valid/preimages.bin",
       "expect": "reject",
-      "clause": "embedding.version-zero"
+      "clause": "embedding.version-zero",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24589,
+          "firstDiff": 0,
+          "parses": true,
+          "changed": [
+            "00625f16e92d4446e934d822637cb58ff949dca9742c9f82a05c1d2f736e6a87d700=01000000000000000000000000000000000000000000000000000000000f4240"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/basic-data-reserved-garbage",
@@ -306,7 +670,18 @@
       "snapshot": "snapshot/basic-data-reserved-garbage/snapshot.bin",
       "preimages": "valid/preimages.bin",
       "expect": "reject",
-      "clause": "embedding.basic-data-layout"
+      "clause": "embedding.basic-data-layout",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24588,
+          "firstDiff": 0,
+          "parses": true,
+          "changed": [
+            "00625f16e92d4446e934d822637cb58ff949dca9742c9f82a05c1d2f736e6a87d700=ffffff000000000000000000000000000000000000000000000000000f4240"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/wrong-code-size",
@@ -315,7 +690,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "verification.code-limb",
-      "note": "codeChunkExact claims 7 bytes"
+      "note": "codeChunkExact claims 7 bytes",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24559,
+          "firstDiff": 0,
+          "parses": true,
+          "changed": [
+            "00de6aa80c5d5372fcefaacd56c0de779c1a2ef98428d0783deead7daf6c78102c00=07000000000000000000000000000000000000000000000001"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/codeless-nonzero-code-size",
@@ -324,7 +710,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "verification.code-limb",
-      "note": "eoaBalance claims 1 byte of code with no chunks"
+      "note": "eoaBalance claims 1 byte of code with no chunks",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24582,
+          "firstDiff": 0,
+          "parses": true,
+          "changed": [
+            "00625f16e92d4446e934d822637cb58ff949dca9742c9f82a05c1d2f736e6a87d700=010000000000000000000000000000000000000000000f4240"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/codeless-wrong-code-hash",
@@ -333,7 +730,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "verification.consensus-anchoring",
-      "note": "eoaBalance's code hash is not keccak(empty)"
+      "note": "eoaBalance's code hash is not keccak(empty)",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24526,
+          "firstDiff": 0,
+          "parses": true,
+          "changed": [
+            "00625f16e92d4446e934d822637cb58ff949dca9742c9f82a05c1d2f736e6a87d701=01"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/missing-code-chunk",
@@ -342,7 +750,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "verification.code-limb",
-      "note": "chunk 0 of the 31-byte JUMPDEST code"
+      "note": "chunk 0 of the 31-byte JUMPDEST code",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24490,
+          "firstDiff": 0,
+          "parses": true,
+          "removed": [
+            "0195a90454030edacd7a6ff4aa46267eeff5da505ebc3f11ed185b320b2602933000=5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/flipped-pushdata-byte",
@@ -351,7 +770,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "verification.code-limb",
-      "note": "chunk 0 of the 31-byte JUMPDEST code, count 0 to 1"
+      "note": "chunk 0 of the 31-byte JUMPDEST code, count 0 to 1",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24560,
+          "firstDiff": 0,
+          "parses": true,
+          "changed": [
+            "0195a90454030edacd7a6ff4aa46267eeff5da505ebc3f11ed185b320b2602933000=015b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/pushdata-byte-out-of-range",
@@ -360,7 +790,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "embedding.code-chunk-layout",
-      "note": "a leading count of 0xff"
+      "note": "a leading count of 0xff",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24560,
+          "firstDiff": 0,
+          "parses": true,
+          "changed": [
+            "0195a90454030edacd7a6ff4aa46267eeff5da505ebc3f11ed185b320b2602933000=ff5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/orphan-code-leaves",
@@ -369,7 +810,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "verification.code-limb",
-      "note": "chunks under a code hash no account holds"
+      "note": "chunks under a code hash no account holds",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24596,
+          "firstDiff": 0,
+          "parses": true,
+          "added": [
+            "01892101328229bdf4a79cce16a6008f4ede2ed9eb7007df95721e2204bd78cf7200=01"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/chunk-beyond-code-size",
@@ -378,7 +830,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "verification.code-limb",
-      "note": "a chunk at index 1 for 31 bytes of code"
+      "note": "a chunk at index 1 for 31 bytes of code",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24596,
+          "firstDiff": 0,
+          "parses": true,
+          "added": [
+            "0195a90454030edacd7a6ff4aa46267eeff5da505ebc3f11ed185b320b2602933001=01"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/code-hash-claimed-twice",
@@ -387,7 +850,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "verification.code-limb",
-      "note": "sharedB's code-hash leaf pointed at the 31-byte code, so one hash is claimed with two sizes"
+      "note": "sharedB's code-hash leaf pointed at the 31-byte code, so one hash is claimed with two sizes",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24559,
+          "firstDiff": 0,
+          "parses": true,
+          "changed": [
+            "0051b43d25161213e37c0073993f590e12895e698f215330a6ad6ca14d153abe5d01=a707f8a78fcde1950ab3f18ad1af0d120d7097919c5c7f80051cb151c161ea5c"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/surplus-account-leaves",
@@ -396,7 +870,19 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "converter.preimage-set-matches-leaves",
-      "note": "an account with no preimage record"
+      "note": "an account with no preimage record",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24666,
+          "firstDiff": 0,
+          "parses": true,
+          "added": [
+            "00ad19977c82fe964030933cdeb34e866fc1ccff737a443b895cc60ffd717d42c100=01",
+            "00ad19977c82fe964030933cdeb34e866fc1ccff737a443b895cc60ffd717d42c101=c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/storage-leaf-missing",
@@ -405,7 +891,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "converter.preimage-set-matches-leaves",
-      "note": "storageSpread's slot 64 leaf dropped while the preimages still name it"
+      "note": "storageSpread's slot 64 leaf dropped while the preimages still name it",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24487,
+          "firstDiff": 0,
+          "parses": true,
+          "removed": [
+            "ff3b2159c6e73ba3a2be5aeaafa747cf6d05c6396aa48678020031cf23cb55d24d3b1353d94bcc614c272d746817e70427c8ebe1de63a6f553d4be8bc99c95e34740=a2"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/orphan-storage-leaf",
@@ -414,7 +911,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "converter.preimage-set-matches-leaves",
-      "note": "a storage leaf for an address with no account and no record, so nothing can key it"
+      "note": "a storage leaf for an address with no account and no record, so nothing can key it",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24596,
+          "firstDiff": 0,
+          "parses": true,
+          "added": [
+            "00f7d01b2a895d6c17aafaa414c406387237ca0632955088dee695bfa078ecfb0b40=01"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/delegation-and-code-hash",
@@ -423,7 +931,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "embedding.one-of-codehash-or-delegation",
-      "note": "delegatedA holds both"
+      "note": "delegatedA holds both",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24629,
+          "firstDiff": 0,
+          "parses": true,
+          "added": [
+            "00467cf32ae19840b31b7fc73d1d0c690ed6224f2028dd39ca5aecaa647a072fd001=c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/delegation-leaf-missing",
@@ -432,7 +951,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "embedding.one-of-codehash-or-delegation",
-      "note": "delegatedA holds neither"
+      "note": "delegatedA holds neither",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24489,
+          "firstDiff": 0,
+          "parses": true,
+          "removed": [
+            "00467cf32ae19840b31b7fc73d1d0c690ed6224f2028dd39ca5aecaa647a072fd002=ef010000000000000000000000000000000000000004ff000000000000000000"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/codeless-without-code-hash",
@@ -441,7 +971,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "embedding.one-of-codehash-or-delegation",
-      "note": "eoaBalance holds neither"
+      "note": "eoaBalance holds neither",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24489,
+          "firstDiff": 0,
+          "parses": true,
+          "removed": [
+            "00625f16e92d4446e934d822637cb58ff949dca9742c9f82a05c1d2f736e6a87d701=c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/delegation-with-code-leaves",
@@ -450,7 +991,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "embedding.delegation-has-no-code-leaves",
-      "note": "chunks under keccak(indicator); the MPT code hash of delegatedA is that hash, so a code-hash-to-chunks mapping would accept them"
+      "note": "chunks under keccak(indicator); the MPT code hash of delegatedA is that hash, so a code-hash-to-chunks mapping would accept them",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24596,
+          "firstDiff": 0,
+          "parses": true,
+          "added": [
+            "0186bfa763b38b4d16ca2fd51b3188bb125a91ca270baadd155423d6718e0a9e4d00=01"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/delegation-wrong-designator",
@@ -459,7 +1011,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "embedding.delegation-leaf-layout",
-      "note": "0xef0200 prefix"
+      "note": "0xef0200 prefix",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24559,
+          "firstDiff": 0,
+          "parses": true,
+          "changed": [
+            "00467cf32ae19840b31b7fc73d1d0c690ed6224f2028dd39ca5aecaa647a072fd002=ef020000000000000000000000000000000000000004ff000000000000000000"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/delegation-wrong-code-size",
@@ -468,7 +1031,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "embedding.delegation-code-size-23",
-      "note": "24"
+      "note": "24",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24559,
+          "firstDiff": 0,
+          "parses": true,
+          "changed": [
+            "00467cf32ae19840b31b7fc73d1d0c690ed6224f2028dd39ca5aecaa647a072fd000=18000000000000000000000000000000000000000000000001"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/delegation-code-size-zero",
@@ -477,7 +1051,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "embedding.delegation-code-size-23",
-      "note": "0"
+      "note": "0",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24533,
+          "firstDiff": 0,
+          "parses": true,
+          "changed": [
+            "00467cf32ae19840b31b7fc73d1d0c690ed6224f2028dd39ca5aecaa647a072fd000=01"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/delegation-padding-garbage",
@@ -485,7 +1070,18 @@
       "snapshot": "snapshot/delegation-padding-garbage/snapshot.bin",
       "preimages": "valid/preimages.bin",
       "expect": "reject",
-      "clause": "embedding.delegation-leaf-layout"
+      "clause": "embedding.delegation-leaf-layout",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24559,
+          "firstDiff": 0,
+          "parses": true,
+          "changed": [
+            "00467cf32ae19840b31b7fc73d1d0c690ed6224f2028dd39ca5aecaa647a072fd002=ef010000000000000000000000000000000000000004ff0000000000000000ff"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/reserved-header-subindex",
@@ -494,7 +1090,18 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "converter.preimage-set-matches-leaves",
-      "note": "eoaBalance sub-index 3: no key the EIP defines resolves there, so no preimage can name it"
+      "note": "eoaBalance sub-index 3: no key the EIP defines resolves there, so no preimage can name it",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24596,
+          "firstDiff": 0,
+          "parses": true,
+          "added": [
+            "00625f16e92d4446e934d822637cb58ff949dca9742c9f82a05c1d2f736e6a87d703=01"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/header-slot-in-storage-zone",
@@ -503,7 +1110,21 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "embedding.header-holds-slots-0-63",
-      "note": "storageSpread's slot 0 keyed as overflow"
+      "note": "storageSpread's slot 0 keyed as overflow",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24593,
+          "firstDiff": 0,
+          "parses": true,
+          "added": [
+            "ff3b2159c6e73ba3a2be5aeaafa747cf6d05c6396aa48678020031cf23cb55d24d3b1353d94bcc614c272d746817e70427c8ebe1de63a6f553d4be8bc99c95e34700=a0"
+          ],
+          "removed": [
+            "003b2159c6e73ba3a2be5aeaafa747cf6d05c6396aa48678020031cf23cb55d24d40=a0"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/storage-leaf-unkeyable",
@@ -512,7 +1133,21 @@
       "preimages": "valid/preimages.bin",
       "expect": "reject",
       "clause": "embedding.storage-key-derivation",
-      "note": "storageSpread's slot 512 keyed under tree_index 0"
+      "note": "storageSpread's slot 512 keyed under tree_index 0",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24559,
+          "firstDiff": 0,
+          "parses": true,
+          "added": [
+            "ff3b2159c6e73ba3a2be5aeaafa747cf6d05c6396aa48678020031cf23cb55d24d3b1353d94bcc614c272d746817e70427c8ebe1de63a6f553d4be8bc99c95e347c8=a6"
+          ],
+          "removed": [
+            "ff3b2159c6e73ba3a2be5aeaafa747cf6d05c6396aa48678020031cf23cb55d24da669f0b8125bd88035ad1c2b4d68989d86d90a22e273b808729476f57439c41d00=a6"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/anchored-elsewhere",
@@ -521,7 +1156,28 @@
       "preimages": "snapshot/anchored-elsewhere/preimages.bin",
       "expect": "reject",
       "clause": "verification.consensus-anchoring",
-      "note": "eoaBalance removed from both files: internally consistent, but not the anchor state"
+      "note": "eoaBalance removed from both files: internally consistent, but not the anchor state",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 24449,
+          "firstDiff": 0,
+          "parses": true,
+          "removed": [
+            "00625f16e92d4446e934d822637cb58ff949dca9742c9f82a05c1d2f736e6a87d700=0f4240",
+            "00625f16e92d4446e934d822637cb58ff949dca9742c9f82a05c1d2f736e6a87d701=c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+          ]
+        },
+        "preimages": {
+          "validLen": 1472,
+          "caseLen": 1448,
+          "firstDiff": 186,
+          "parses": true,
+          "removed": [
+            "0000000000000000000000000000000000000101:e3b0c44298fc1c14"
+          ]
+        }
+      }
     },
     {
       "id": "snapshot/empty",
@@ -530,7 +1186,21 @@
       "preimages": "valid/preimages.bin",
       "expect": "unspecified",
       "clause": "unspecified.empty-snapshot",
-      "note": "leafCount 0 under the empty-tree root"
+      "note": "leafCount 0 under the empty-tree root",
+      "effect": {
+        "snapshot": {
+          "validLen": 24559,
+          "caseLen": 40,
+          "firstDiff": 0,
+          "parses": true,
+          "removed": [
+            "0024b3b4d16f572a5034fccf36fe217ee40a3fd10d2b7adb54594d72608bb66e9800=1f000000000000000000000000000000000000000000000001",
+            "0024b3b4d16f572a5034fccf36fe217ee40a3fd10d2b7adb54594d72608bb66e9801=a707f8a78fcde1950ab3f18ad1af0d120d7097919c5c7f80051cb151c161ea5c",
+            "0026c706f12ced4eba335fde6ff5d9d2455e4b0fb6e43e17a5086aa5b9cba3147300=18000000000000000000000000000000000000000000000001",
+            "0026c706f12ced4eba335fde6ff5d9d2455e4b0fb6e43e17a5086aa5b9cba3147301=d07ad01bcd0bba8e6b49e9a45b4d20d6bca9aebaff800b6e87b1cea7104c3d7b"
+          ]
+        }
+      }
     }
   ]
 }

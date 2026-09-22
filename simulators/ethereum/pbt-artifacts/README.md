@@ -56,9 +56,14 @@ outcome off the log, synthesizing a chainspec with a scheduled
 `binaryTrieTime` (fork times placed after genesis, so the genesis hash is
 unchanged) and the `manifest.json` the EIP does not define.
 
-Optionally, `shims/<client>.reasons.json` maps case ids to a regexp over the
-client's stderr. With it, a rejection counts only when it names the clause
-the case breaks; without it, rejections are counted but not attributed.
+Each case records in `fixtures/manifest.json` the effect its mutation had on
+the artifact: byte lengths, the first differing offset, whether the file
+still parses, and the leaf keys or record addresses it added, removed,
+changed or reordered. The generator computes it from the bytes it wrote, the
+simulator refuses a set where two cases record the same effect, and every
+test carries it in its description. Nothing is matched against a client's
+error text: a rejection is judged on exit status, and what the case changed
+is known from the fixture rather than from what the client says about it.
 
 ## Scoring
 
@@ -66,8 +71,7 @@ the case breaks; without it, rejections are counted but not attributed.
   `inconclusive`.
 - `<suite>/valid` gates its suite: reject the sound pair and the rest is
   `inconclusive`; answer unsupported and the suite becomes one `NOT-RUN` row.
-- A reject case passes on exit `1` with something on stderr, and with
-  reasons present, only for the attributed reason.
+- A reject case passes on exit `1` with something on stderr.
 - `unspecified` cases are run and reported, never scored.
 - `agreement/<artifact>` is the run's verdict, not a client's: every
   producer must match the canonical bytes. One diverging fails; none matching
