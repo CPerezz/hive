@@ -219,19 +219,14 @@ func writeCases(outDir string, valid *artifacts) ([]caseEntry, error) {
 			return nil, fmt.Errorf("case %s shapes nothing", m.id)
 		}
 		changed := false
-		var eff effect
 		for _, f := range []struct {
-			blob    []byte
-			valid   string
-			name    string
-			field   *string
-			into    **fileEffect
-			compute func(validBlob, caseBlob []byte) *fileEffect
+			blob  []byte
+			valid string
+			name  string
+			field *string
 		}{
-			{snap, valid.snapshotFD, "snapshot.bin", &entry.Snapshot, &eff.Snapshot, func(v, c []byte) *fileEffect {
-				return snapshotEffect(v, c, valid.root)
-			}},
-			{pre, valid.preimageFD, "preimages.bin", &entry.Preimages, &eff.Preimages, preimageEffect},
+			{snap, valid.snapshotFD, "snapshot.bin", &entry.Snapshot},
+			{pre, valid.preimageFD, "preimages.bin", &entry.Preimages},
 		} {
 			if f.blob == nil {
 				continue
@@ -241,14 +236,18 @@ func writeCases(outDir string, valid *artifacts) ([]caseEntry, error) {
 				return nil, err
 			}
 			*f.field = rel(outDir, path)
-			validBlob := mustRead(f.valid)
-			changed = changed || !bytes.Equal(f.blob, validBlob)
-			*f.into = f.compute(validBlob, f.blob)
+			changed = changed || !bytes.Equal(f.blob, mustRead(f.valid))
 		}
 		if !changed {
 			return nil, fmt.Errorf("case %s produced the valid files unchanged", m.id)
 		}
-		entry.Effect = &eff
+		entry.Effect = &effect{}
+		if snap != nil {
+			entry.Effect.Snapshot = snapshotEffect(mustRead(valid.snapshotFD), snap)
+		}
+		if pre != nil {
+			entry.Effect.Preimages = preimageEffect(mustRead(valid.preimageFD), pre)
+		}
 		entries = append(entries, entry)
 	}
 	return entries, nil
@@ -324,6 +323,9 @@ type manifest struct {
 }
 
 func writeManifest(outDir, genesisPath string, valid *artifacts, cases []caseEntry) error {
+	if a, b := duplicateEffect(cases); a != "" {
+		return fmt.Errorf("cases %s and %s record the same effect: they are one mutation written twice", a, b)
+	}
 	snapBlob, err := os.ReadFile(valid.snapshotFD)
 	if err != nil {
 		return err
@@ -355,7 +357,7 @@ func writeManifest(outDir, genesisPath string, valid *artifacts, cases []caseEnt
 	if err != nil {
 		return err
 	}
-	fmt.Printf("manifest: %d cases, %d distinct effects\n", len(cases), distinctEffects(cases))
+	fmt.Printf("manifest: %d cases\n", len(cases))
 	return os.WriteFile(filepath.Join(outDir, "manifest.json"), append(blob, '\n'), 0644)
 }
 

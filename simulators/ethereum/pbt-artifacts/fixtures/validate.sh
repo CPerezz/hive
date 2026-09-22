@@ -16,16 +16,15 @@ missing=$(jq -r '[.cases[] | select(.effect == null) | .id] | join(" ")' "$here/
 
 "$geth" --datadir "$datadir" init "$here/genesis.json" >/dev/null 2>&1 || { echo "FATAL: genesis init failed"; exit 2; }
 
-verify() { # snapshot preimages -> stderr on stdout, exit status
-    "$geth" --datadir "$datadir" bintrie import --verify-only "$here/$1" "$here/$2" 0 2>&1 </dev/null
+verify() { # snapshot preimages -> exit status
+    "$geth" --datadir "$datadir" bintrie import --verify-only "$here/$1" "$here/$2" 0 >/dev/null 2>&1 </dev/null
 }
 
 pass=0 fail=0
-verify valid/snapshot.bin valid/preimages.bin >/dev/null
-if [ $? -eq 0 ]; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL valid pair: rejected"; fi
+if verify valid/snapshot.bin valid/preimages.bin; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL valid pair: rejected"; fi
 
 while IFS=$'\t' read -r id expect snapshot preimages; do
-    verify "$snapshot" "$preimages" >/dev/null
+    verify "$snapshot" "$preimages"
     status=$?
     if [ "$expect" = "unspecified" ]; then
         echo "note $id: exit $status (clause is open; not scored)"

@@ -99,9 +99,10 @@ func decodeSnapshot(blob []byte) (common.Hash, []leaf, error) {
 	return root, leaves, nil
 }
 
-// decodePreimagesLoose parses records until the bytes stop making sense,
-// returning those it read alongside the error that stopped it.
-func decodePreimagesLoose(blob []byte) ([]record, error) {
+// decodePreimages parses records until the bytes stop making sense,
+// returning those it read alongside the error that stopped it, so a file
+// malformed on purpose still yields a diffable shape.
+func decodePreimages(blob []byte) ([]record, error) {
 	var recs []record
 	for len(blob) > 0 {
 		if len(blob) < preimageRecordHeaderSize {
@@ -119,14 +120,6 @@ func decodePreimagesLoose(blob []byte) ([]record, error) {
 			blob = blob[common.HashLength:]
 		}
 		recs = append(recs, record{addr: addr, slots: slots})
-	}
-	return recs, nil
-}
-
-func decodePreimages(blob []byte) ([]record, error) {
-	recs, err := decodePreimagesLoose(blob)
-	if err != nil {
-		return nil, err
 	}
 	return recs, nil
 }

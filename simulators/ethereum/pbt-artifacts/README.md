@@ -3,9 +3,9 @@
 Conformance for the [EIP-8347](https://eips.ethereum.org/EIPS/eip-8347) offline
 migration artifacts, the preimage file and the PBT snapshot. Every client is
 handed the same byte-canonical pair and must accept the sound one, reject
-each unsound one for the reason its clause names, and where it can produce
-an artifact, emit the same bytes. Clients that lack a feature report it as
-unsupported, so the run doubles as a capability matrix.
+every unsound one, and where it can produce an artifact, emit the same
+bytes. Clients that lack a feature report it as unsupported, so the run
+doubles as a capability matrix.
 
 The live migration (BAL replay, shadow roots, the fork switch) belongs to
 [pbt-devnet](https://github.com/CPerezz/pbt-devnet).
@@ -62,8 +62,7 @@ still parses, and the leaf keys or record addresses it added, removed,
 changed or reordered. The generator computes it from the bytes it wrote, the
 simulator refuses a set where two cases record the same effect, and every
 test carries it in its description. Nothing is matched against a client's
-error text: a rejection is judged on exit status, and what the case changed
-is known from the fixture rather than from what the client says about it.
+error text.
 
 ## Scoring
 
