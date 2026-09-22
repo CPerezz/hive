@@ -45,8 +45,8 @@ func mutations(valid *artifacts) []mutation {
 		// The preimage file.
 		rawPre("trailing-byte", "preimage.no-trailing-bytes", "",
 			func(b []byte) []byte { return append(bytes.Clone(b), 0x00) }),
-		rawPre("truncated-record", "preimage.record-self-delimiting", "the last slot key is cut short",
-			func(b []byte) []byte { return bytes.Clone(b)[:len(b)-1] }),
+		rawPre("truncated-record", "preimage.record-self-delimiting", "the file ends inside a slot key",
+			func(b []byte) []byte { return bytes.Clone(b)[:endOfLastSlot(b)-1] }),
 		rawPre("slot-count-huge", "preimage.record-self-delimiting", "the first record claims 2^32-1 slots",
 			func(b []byte) []byte {
 				out := bytes.Clone(b)
@@ -100,6 +100,14 @@ func mutations(valid *artifacts) []mutation {
 				return recs
 			}),
 		rawPre("empty-file", "converter.preimage-set-matches-leaves", "", func([]byte) []byte { return []byte{} }),
+		preimages("slot-on-wrong-account", "converter.preimage-set-matches-leaves",
+			"storageSpread's slot 64 named under storageValues: the set is intact, the binding is not",
+			func(recs []record) []record {
+				i, j := findRecord(recs, storageSpread), findRecord(recs, storageValues)
+				recs[i].slots = slices.DeleteFunc(recs[i].slots, func(s common.Hash) bool { return s == h(64) })
+				recs[j].slots = append(recs[j].slots, h(64))
+				return recs
+			}),
 
 		// The snapshot: framing.
 		rawSnap("wrong-claimed-root", "snapshot.root-recomputed", "",
@@ -165,6 +173,12 @@ func mutations(valid *artifacts) []mutation {
 				leaves[findKey(leaves, bintrie.BasicDataKey(eoaBalance))].value[31] ^= 1
 				return leaves
 			}),
+		snapshot("delegation-target-changed", "verification.consensus-anchoring",
+			"one byte of delegatedA's target; the MPT code hash is keccak of the indicator, which check 2 must derive",
+			func(leaves []leaf) []leaf {
+				leaves[findKey(leaves, bintrie.DelegationKey(delegatedA))].value[22] ^= 1
+				return leaves
+			}),
 		snapshot("nonzero-version", "embedding.version-zero", "",
 			func(leaves []leaf) []leaf {
 				leaves[findKey(leaves, bintrie.BasicDataKey(eoaBalance))].value[0] = 1
@@ -210,11 +224,33 @@ func mutations(valid *artifacts) []mutation {
 			func(leaves []leaf) []leaf {
 				return insertSorted(leaves, leaf{key: bintrie.CodeChunkKey(crypto.Keccak256Hash([]byte("orphan")), 0), value: one})
 			}),
+		snapshot("chunk-beyond-code-size", "verification.code-limb", "a chunk at index 1 for 31 bytes of code",
+			func(leaves []leaf) []leaf {
+				return insertSorted(leaves, leaf{key: bintrie.CodeChunkKey(codeHash, 1), value: one})
+			}),
+		snapshot("code-hash-claimed-twice", "verification.code-limb",
+			"sharedB's code-hash leaf pointed at the 31-byte code, so one hash is claimed with two sizes",
+			func(leaves []leaf) []leaf {
+				leaves[findKey(leaves, bintrie.CodeHashKey(sharedB))].value = codeHash
+				return leaves
+			}),
 		snapshot("surplus-account-leaves", "converter.preimage-set-matches-leaves", "an account with no preimage record",
 			func(leaves []leaf) []leaf {
 				addr := common.HexToAddress("0x00000000000000000000000000000000deadbeef")
 				leaves = insertSorted(leaves, leaf{key: bintrie.BasicDataKey(addr), value: basicData(0, 0, big.NewInt(1))})
 				return insertSorted(leaves, leaf{key: bintrie.CodeHashKey(addr), value: emptyCode})
+			}),
+		snapshot("storage-leaf-missing", "converter.preimage-set-matches-leaves",
+			"storageSpread's slot 64 leaf dropped while the preimages still name it",
+			func(leaves []leaf) []leaf {
+				i := findKey(leaves, bintrie.StorageSlotKey(storageSpread, h(64).Bytes()))
+				return slices.Delete(leaves, i, i+1)
+			}),
+		snapshot("orphan-storage-leaf", "converter.preimage-set-matches-leaves",
+			"a storage leaf for an address with no account and no record, so nothing can key it",
+			func(leaves []leaf) []leaf {
+				addr := common.HexToAddress("0x00000000000000000000000000000000cafebabe")
+				return insertSorted(leaves, leaf{key: bintrie.StorageSlotKey(addr, h(0).Bytes()), value: one})
 			}),
 		snapshot("delegation-and-code-hash", "embedding.one-of-codehash-or-delegation", "delegatedA holds both",
 			func(leaves []leaf) []leaf {
@@ -294,6 +330,20 @@ func mutations(valid *artifacts) []mutation {
 			rawSnap: func([]byte) []byte { return make([]byte, snapshotHeaderSize) },
 		},
 	}
+}
+
+// endOfLastSlot is the offset just past the last slot key in the file, so a
+// cut before it lands inside a slot rather than inside a slotless record.
+func endOfLastSlot(b []byte) int {
+	end, i := 0, 0
+	for i < len(b) {
+		n := int(binary.BigEndian.Uint32(b[i+common.AddressLength:]))
+		i += preimageRecordHeaderSize + n*common.HashLength
+		if n > 0 {
+			end = i
+		}
+	}
+	return end
 }
 
 func deleteRecord(recs []record, addr common.Address) []record {

@@ -435,7 +435,8 @@ func loadReasons(path string) map[string]*regexp.Regexp {
 	}
 	reasons := make(map[string]*regexp.Regexp, len(raw))
 	for id, pattern := range raw {
-		reasons[id] = regexp.MustCompile(pattern)
+		// Line-anchored, as grep reads them: the same file drives validate.sh.
+		reasons[id] = regexp.MustCompile("(?m)" + pattern)
 	}
 	return reasons
 }

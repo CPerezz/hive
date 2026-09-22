@@ -7,19 +7,19 @@
   },
   "genesis": {
     "file": "genesis.json",
-    "stateRoot": "0xeac80e28141a6dc270e3c653c0e3da593e42dbdd0112a0470370f59bd02ff748",
-    "pbtRoot": "0xf1e3c92607ceab5348df6b72bc9e7d202bb51992216bbe8e7c17b3b430167d62",
-    "accounts": 30
+    "stateRoot": "0xb5656f58d12a56427942e7a422755496122c7fceba8b3af277f0df13da57d50c",
+    "pbtRoot": "0x55bb5c289cdb063eb89f0fc09df1c9849ebab4a1b045a83a9ecc40b2f011cfc8",
+    "accounts": 32
   },
   "valid": {
     "snapshot": "valid/snapshot.bin",
     "preimages": "valid/preimages.bin",
-    "snapshotDigest": "0xdfe6f1c53535c5ef7943fd5982ae9fa444b82901ee10a9e1edf83f35077c0ae6",
-    "preimageDigest": "0x36ebc278d3293c8bf7728c23471294d6a244e66c440b9e5ec7d999e5b5c44e4c",
-    "snapshotSha256": "0x814be9af67e40e55ba4a5d9b463aba1df830f864570a94379880f984bbd6ea17",
-    "preimageSha256": "0x64987bd0d2e702df16c93b3eb3a15dd96036fcce93ccf99698724543e0ab4829",
-    "leafCount": 355,
-    "records": 30
+    "snapshotDigest": "0xf2301b3bf78f12445f102e1761824c4c05a46b9cc5153cc415abef42626258db",
+    "preimageDigest": "0xe0af5df37c748df3eb3ba0adb07b138e19ffaeccfd6e2eaf7c46ebaf7dc60d2b",
+    "snapshotSha256": "0x574bb1800430f75b6a2d1bec76596738ddfd754ac441d427d375717f2ee4e0a0",
+    "preimageSha256": "0xe03895c97fd83d62c9526248113d1ba8f02ea3114fd90e6e719ef935f084d5bb",
+    "leafCount": 363,
+    "records": 32
   },
   "cases": [
     {
@@ -37,7 +37,7 @@
       "preimages": "preimages/truncated-record/preimages.bin",
       "expect": "reject",
       "clause": "preimage.record-self-delimiting",
-      "note": "the last slot key is cut short"
+      "note": "the file ends inside a slot key"
     },
     {
       "id": "preimages/slot-count-huge",
@@ -134,6 +134,15 @@
       "preimages": "preimages/empty-file/preimages.bin",
       "expect": "reject",
       "clause": "converter.preimage-set-matches-leaves"
+    },
+    {
+      "id": "preimages/slot-on-wrong-account",
+      "suite": "preimages",
+      "snapshot": "valid/snapshot.bin",
+      "preimages": "preimages/slot-on-wrong-account/preimages.bin",
+      "expect": "reject",
+      "clause": "converter.preimage-set-matches-leaves",
+      "note": "storageSpread's slot 64 named under storageValues: the set is intact, the binding is not"
     },
     {
       "id": "snapshot/wrong-claimed-root",
@@ -275,6 +284,15 @@
       "note": "eoaBalance's balance, root recomputed"
     },
     {
+      "id": "snapshot/delegation-target-changed",
+      "suite": "snapshot",
+      "snapshot": "snapshot/delegation-target-changed/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "verification.consensus-anchoring",
+      "note": "one byte of delegatedA's target; the MPT code hash is keccak of the indicator, which check 2 must derive"
+    },
+    {
       "id": "snapshot/nonzero-version",
       "suite": "snapshot",
       "snapshot": "snapshot/nonzero-version/snapshot.bin",
@@ -354,6 +372,24 @@
       "note": "chunks under a code hash no account holds"
     },
     {
+      "id": "snapshot/chunk-beyond-code-size",
+      "suite": "snapshot",
+      "snapshot": "snapshot/chunk-beyond-code-size/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "verification.code-limb",
+      "note": "a chunk at index 1 for 31 bytes of code"
+    },
+    {
+      "id": "snapshot/code-hash-claimed-twice",
+      "suite": "snapshot",
+      "snapshot": "snapshot/code-hash-claimed-twice/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "verification.code-limb",
+      "note": "sharedB's code-hash leaf pointed at the 31-byte code, so one hash is claimed with two sizes"
+    },
+    {
       "id": "snapshot/surplus-account-leaves",
       "suite": "snapshot",
       "snapshot": "snapshot/surplus-account-leaves/snapshot.bin",
@@ -361,6 +397,24 @@
       "expect": "reject",
       "clause": "converter.preimage-set-matches-leaves",
       "note": "an account with no preimage record"
+    },
+    {
+      "id": "snapshot/storage-leaf-missing",
+      "suite": "snapshot",
+      "snapshot": "snapshot/storage-leaf-missing/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "converter.preimage-set-matches-leaves",
+      "note": "storageSpread's slot 64 leaf dropped while the preimages still name it"
+    },
+    {
+      "id": "snapshot/orphan-storage-leaf",
+      "suite": "snapshot",
+      "snapshot": "snapshot/orphan-storage-leaf/snapshot.bin",
+      "preimages": "valid/preimages.bin",
+      "expect": "reject",
+      "clause": "converter.preimage-set-matches-leaves",
+      "note": "a storage leaf for an address with no account and no record, so nothing can key it"
     },
     {
       "id": "snapshot/delegation-and-code-hash",

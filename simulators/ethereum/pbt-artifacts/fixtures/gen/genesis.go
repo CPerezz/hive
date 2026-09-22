@@ -33,6 +33,7 @@ var (
 	codeSmallPush   = common.HexToAddress("0x000000000000000000000000000000000000020b")
 	codeTrailZero   = common.HexToAddress("0x000000000000000000000000000000000000020c")
 	codeZeroBalance = common.HexToAddress("0x000000000000000000000000000000000000020d")
+	codeWithNonce   = common.HexToAddress("0x000000000000000000000000000000000000020e")
 	sharedA         = common.HexToAddress("0x0000000000000000000000000000000000000301")
 	sharedB         = common.HexToAddress("0x0000000000000000000000000000000000000302")
 	delegatedA      = common.HexToAddress("0x0000000000000000000000000000000000000401")
@@ -46,6 +47,7 @@ var (
 	storageValues   = common.HexToAddress("0x0000000000000000000000000000000000000502")
 	storageOnEOA    = common.HexToAddress("0x0000000000000000000000000000000000000503")
 	storageOverflow = common.HexToAddress("0x0000000000000000000000000000000000000504")
+	storageHeader   = common.HexToAddress("0x0000000000000000000000000000000000000505")
 )
 
 const chunk = 31
@@ -117,6 +119,7 @@ func edgeCaseAlloc() types.GenesisAlloc {
 		codeFakeDelega:  {Balance: one, Code: append(delegation(delegateTarget), 0x5b)},
 		codeFake23:      {Balance: one, Code: append([]byte{0xef, 0x02, 0x00}, delegateTarget.Bytes()...)},
 		codeZeroBalance: {Balance: big.NewInt(0), Code: fill(1)},
+		codeWithNonce:   {Balance: one, Nonce: 1, Code: fill(chunk + 1)},
 
 		sharedA: {Balance: one, Code: shared},
 		sharedB: {Balance: big.NewInt(2), Code: shared},
@@ -137,18 +140,21 @@ func edgeCaseAlloc() types.GenesisAlloc {
 			Storage: map[common.Hash]common.Hash{
 				h(0): h(0xa0), h(63): h(0xa1), h(64): h(0xa2), h(255): h(0xa3),
 				h(256): h(0xa4), h(511): h(0xa5), h(512): h(0xa6),
-				common.BigToHash(maxSlot): h(0xa7),
+				common.BigToHash(pow2(255)): h(0xa8),
+				common.BigToHash(maxSlot):   h(0xa7),
 			},
 		},
 		storageValues: {
 			Balance: one, Code: fill(chunk),
 			Storage: map[common.Hash]common.Hash{
 				h(1): h(1), h(2): common.BigToHash(maxSlot), h(3): h(256),
-				h(4): common.BigToHash(pow2(248)), h(65): h(0xff),
+				h(4): common.BigToHash(pow2(248)), h(5): common.BigToHash(new(big.Int).Lsh(big.NewInt(0xff), 128)),
+				h(65): h(0xff),
 			},
 		},
 		storageOnEOA:    {Balance: one, Storage: map[common.Hash]common.Hash{h(0): h(1), h(64): h(2)}},
 		storageOverflow: {Balance: one, Storage: map[common.Hash]common.Hash{h(300): h(3)}},
+		storageHeader:   {Balance: one, Storage: map[common.Hash]common.Hash{h(7): h(4), h(63): h(5)}},
 	}
 }
 
