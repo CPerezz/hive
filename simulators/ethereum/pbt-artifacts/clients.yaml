@@ -1,0 +1,34 @@
+# The client set this simulator is meant to run against.
+#
+#   ./hive --sim ethereum/pbt-artifacts \
+#          --client-file simulators/ethereum/pbt-artifacts/clients.yaml
+#
+# Only the clients with artifact code are pinned. geth's preimage writer
+# follows the current EIP text on pbt-preimage-format; once
+# CPerezz/go-ethereum#41 merges, that folds into pbt-converted-anchor and this
+# can point back at it.
+#
+# erigon and besu are deliberately unpinned. erigon's preimage export is on
+# stock main-latest, and besu has no offline artifact command on any branch, so
+# pinning it would cost a Gradle build for no extra signal.
+#
+# reth is absent on purpose: it has no PBT branch to pin. That gap belongs in
+# the matrix as a missing row, not as a client that fails every case.
+
+- client: go-ethereum
+  nametag: pbt
+  dockerfile: git
+  build_args:
+    github: CPerezz/go-ethereum
+    tag: pbt-preimage-format
+
+- client: nethermind
+  nametag: pbt
+  dockerfile: git
+  build_args:
+    github: NethermindEth/nethermind
+    tag: pbt-state
+
+- client: erigon
+
+- client: besu
