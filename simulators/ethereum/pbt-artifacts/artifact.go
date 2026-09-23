@@ -30,15 +30,19 @@ type manifest struct {
 	digests map[string]string
 }
 
+// testCase is one fixture. A verify case names an artifact pair and the
+// effect its mutation had; a produce case names the defect a shim applies to
+// the converter's source instead.
 type testCase struct {
-	ID        string  `json:"id"`
-	Suite     string  `json:"suite"`
-	Snapshot  string  `json:"snapshot"`
-	Preimages string  `json:"preimages"`
-	Expect    string  `json:"expect"`
-	Clause    string  `json:"clause"`
-	Note      string  `json:"note,omitempty"`
-	Effect    *effect `json:"effect"`
+	ID        string   `json:"id"`
+	Suite     string   `json:"suite"`
+	Snapshot  string   `json:"snapshot"`
+	Preimages string   `json:"preimages"`
+	Defect    []string `json:"defect"`
+	Expect    string   `json:"expect"`
+	Clause    string   `json:"clause"`
+	Note      string   `json:"note,omitempty"`
+	Effect    *effect  `json:"effect"`
 }
 
 const (
@@ -93,12 +97,17 @@ func (f *fileEffect) String() string {
 }
 
 // describe is the test's description in the results: the clause, and what
-// the case did to the bytes. loadManifest has already refused a case
-// without an effect.
+// the case did to the bytes or to the converter's source.
 func (tc testCase) describe() string {
 	s := fmt.Sprintf("Clause: %s (%s)", tc.Clause, tc.Expect)
 	if tc.Note != "" {
 		s += "\n" + tc.Note
+	}
+	if len(tc.Defect) > 0 {
+		s += "\ndefect: " + strings.Join(tc.Defect, " ")
+	}
+	if tc.Effect == nil {
+		return s
 	}
 	if f := tc.Effect.Snapshot; f != nil {
 		s += "\nsnapshot: " + f.String()
@@ -128,13 +137,24 @@ func loadManifest(dir string) (*manifest, error) {
 		if c.Expect != expectReject && c.Expect != expectUnspecified {
 			return nil, fmt.Errorf("case %s expects %q", c.ID, c.Expect)
 		}
-		if c.Suite != "preimages" && c.Suite != "snapshot" {
-			return nil, fmt.Errorf("case %s is in suite %q", c.ID, c.Suite)
-		}
 		if seen[c.ID] {
 			return nil, fmt.Errorf("case %s appears twice", c.ID)
 		}
 		seen[c.ID] = true
+		if c.Suite == "produce" {
+			if len(c.Defect) == 0 || c.Snapshot != "" || c.Preimages != "" {
+				return nil, fmt.Errorf("produce case %s must name a defect and no artifact", c.ID)
+			}
+			key := "defect " + strings.Join(c.Defect, " ")
+			if prev, dup := byEffect[key]; dup {
+				return nil, fmt.Errorf("cases %s and %s apply the same defect", prev, c.ID)
+			}
+			byEffect[key] = c.ID
+			continue
+		}
+		if c.Suite != "preimages" && c.Suite != "snapshot" {
+			return nil, fmt.Errorf("case %s is in suite %q", c.ID, c.Suite)
+		}
 		if c.Effect == nil || (c.Effect.Snapshot == nil && c.Effect.Preimages == nil) {
 			return nil, fmt.Errorf("case %s records no effect: regenerate the fixtures", c.ID)
 		}

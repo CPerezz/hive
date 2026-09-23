@@ -40,14 +40,17 @@ a gap, not a failure.
 |---|---|---|
 | `genesis-root` | | `mpt_root=0x…` |
 | `verify` | `<snapshot> <preimages> <anchor>` | |
-| `convert` | `<anchor>` | `snapshot=<b64>` and/or `preimages=<b64>` |
+| `convert` | `<anchor> [drop-preimage <0xhash>]...` | `snapshot=<b64>` and/or `preimages=<b64>` |
 
 Exit `0` accepted, `1` rejected, `3` unsupported, anything else a crash. A
 crash never counts as a rejection, and a shim must not wrap the client in
 `|| exit 1`: it echoes the real status as `client_exit=`. Paths are relative
 to the fixture tar the simulator uploads; the anchor is block 0.
 `convert` prints only what the client can produce: a missing line means
-that artifact is unsupported.
+that artifact is unsupported. It prints nothing unless the client exited 0.
+Each `drop-preimage` asks for a source whose preimage store lacks that
+hash, which converter step 2 must refuse; a client with no such store
+answers unsupported.
 
 A shim may need more than a command line. Nethermind consumes artifacts
 during node startup, so its shim boots a throwaway node and reads the
@@ -60,8 +63,9 @@ the artifact: byte lengths, the first differing offset, whether the file
 still parses, and the leaf keys or record addresses it added, removed,
 changed or reordered. The generator computes it from the bytes it wrote, the
 simulator refuses a set where two cases record the same effect, and every
-test carries it in its description. Nothing is matched against a client's
-error text.
+test carries it in its description. The simulator matches nothing against
+a client's error text; a shim may, to tell its client's refusal from a
+crash.
 
 ## Scoring
 
@@ -71,6 +75,9 @@ error text.
   `inconclusive`; answer unsupported and the suite becomes one `NOT-RUN` row.
 - A reject case passes on exit `1` with something on stderr.
 - `unspecified` cases are run and reported, never scored.
+- `produce/*` cases run only where the sound source converted. Exit `1`
+  with something on stderr and no artifact line passes; unsupported is a
+  capability, not a failure.
 - `agreement/<artifact>` is the run's verdict, not a client's: every
   producer must match the canonical bytes. One diverging fails; none matching
   fails hardest; a single producer is reported inconclusive.

@@ -57,7 +57,11 @@ func run(gethBin, outDir string) error {
 	if err != nil {
 		return err
 	}
-	return writeManifest(outDir, genesisPath, valid, cases)
+	produce, err := produceCases(alloc)
+	if err != nil {
+		return err
+	}
+	return writeManifest(outDir, genesisPath, valid, append(cases, produce...))
 }
 
 // artifacts is the valid pair, decoded.
@@ -253,6 +257,34 @@ func writeCases(outDir string, valid *artifacts) ([]caseEntry, error) {
 	return entries, nil
 }
 
+// produceCases each delete one preimage from the converter's source store,
+// which converter step 2 must refuse. The shell has no keccak, so the store
+// keys are recorded here. Deleting a slot's preimage removes it for every
+// account holding that slot, so the slot target has one holder.
+func produceCases(alloc types.GenesisAlloc) ([]caseEntry, error) {
+	slot := h(7)
+	var holders int
+	for _, acct := range alloc {
+		if _, ok := acct.Storage[slot]; ok {
+			holders++
+		}
+	}
+	if holders != 1 {
+		return nil, fmt.Errorf("slot 7 is held by %d accounts; the missing-slot case needs one", holders)
+	}
+	drop := func(id, note string, preimage []byte) caseEntry {
+		return caseEntry{
+			ID: "produce/" + id, Suite: "produce", Expect: "reject",
+			Clause: "converter.preimage-set-matches-leaves", Note: note,
+			Defect: []string{"drop-preimage", crypto.Keccak256Hash(preimage).Hex()},
+		}
+	}
+	return []caseEntry{
+		drop("missing-account-preimage", "the source has no preimage for account "+eoaBalance.Hex(), eoaBalance[:]),
+		drop("missing-slot-preimage", "the source has no preimage for slot 7, held by "+storageHeader.Hex(), slot[:]),
+	}, nil
+}
+
 func mustRead(path string) []byte {
 	blob, err := os.ReadFile(path)
 	if err != nil {
@@ -286,14 +318,15 @@ func cloneRecords(in []record) []record {
 }
 
 type caseEntry struct {
-	ID        string  `json:"id"`
-	Suite     string  `json:"suite"`
-	Snapshot  string  `json:"snapshot"`
-	Preimages string  `json:"preimages"`
-	Expect    string  `json:"expect"`
-	Clause    string  `json:"clause"`
-	Note      string  `json:"note,omitempty"`
-	Effect    *effect `json:"effect"`
+	ID        string   `json:"id"`
+	Suite     string   `json:"suite"`
+	Snapshot  string   `json:"snapshot,omitempty"`
+	Preimages string   `json:"preimages,omitempty"`
+	Defect    []string `json:"defect,omitempty"`
+	Expect    string   `json:"expect"`
+	Clause    string   `json:"clause"`
+	Note      string   `json:"note,omitempty"`
+	Effect    *effect  `json:"effect,omitempty"`
 }
 
 type manifest struct {

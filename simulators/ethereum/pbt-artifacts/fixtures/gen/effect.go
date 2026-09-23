@@ -162,9 +162,13 @@ func firstDiff(a, b []byte) int {
 
 // duplicateEffect names the first two cases recording the same effect: they
 // are one mutation written twice, and the simulator refuses such a set.
+// Producer cases change the source, not an artifact, and record none.
 func duplicateEffect(cases []caseEntry) (string, string) {
 	seen := make(map[string]string, len(cases))
 	for _, c := range cases {
+		if c.Effect == nil {
+			continue
+		}
 		key, _ := json.Marshal(c.Effect)
 		if prev, dup := seen[string(key)]; dup {
 			return prev, c.ID

@@ -19,6 +19,10 @@ verify)
     ;;
 
 convert)
+    if [ $# -gt 1 ]; then
+        echo "plain-key state: no preimage store to remove from" >&2
+        exit 3
+    fi
     # From the node's own datadir: `erigon init` leaves neither the aggregator
     # salt nor a commitment-state record, only a started node does. The export
     # takes its own read-only transaction.

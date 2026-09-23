@@ -103,7 +103,8 @@ func runClient(t *hivesim.T, fixtures *manifest, ct *hivesim.ClientDefinition, p
 	for _, suite := range []string{"preimages", "snapshot"} {
 		runVerifySuite(t, c, fixtures, report, suite, anchored)
 	}
-	runConvert(t, c, fixtures, report, producers, anchored)
+	unconverted := runConvert(t, c, fixtures, report, producers, anchored)
+	runProduceNegatives(t, c, fixtures, report, unconverted)
 }
 
 // runGenesisRoot checks the client built the anchor state the fixtures were
@@ -207,15 +208,17 @@ func runVerifySuite(t *hivesim.T, c *client, fixtures *manifest, report *report,
 }
 
 // runConvert measures the production leg per artifact: a client may produce
-// one and not the other.
-func runConvert(t *hivesim.T, c *client, fixtures *manifest, report *report, producers *producerSet, anchored bool) {
+// one and not the other. It returns why nothing was produced, or "" when
+// something was.
+func runConvert(t *hivesim.T, c *client, fixtures *manifest, report *report, producers *producerSet, anchored bool) string {
 	if !anchored {
 		report.set("produce_preimages", "inconclusive")
 		report.set("produce_snapshot", "inconclusive")
-		return
+		return "inconclusive"
 	}
 	produced := map[string][]byte{}
 	var stderr string
+	unconverted := "crash"
 	t.Run(hivesim.TestSpec{
 		Name: fmt.Sprintf("%s/convert/run", c.Type),
 		Run: func(t *hivesim.T) {
@@ -226,6 +229,7 @@ func runConvert(t *hivesim.T, c *client, fixtures *manifest, report *report, pro
 			case exitUnsupported:
 				report.set("produce_preimages", "unsupported")
 				report.set("produce_snapshot", "unsupported")
+				unconverted = "unsupported"
 				t.Fatalf("unsupported: this client converts no artifact\n%s", info.Stderr)
 			default:
 				report.set("produce_preimages", "crash")
@@ -249,7 +253,7 @@ func runConvert(t *hivesim.T, c *client, fixtures *manifest, report *report, pro
 		},
 	})
 	if len(produced) == 0 {
-		return
+		return unconverted
 	}
 	for _, name := range []string{"preimages", "snapshot"} {
 		blob, ok := produced[name]
@@ -278,6 +282,51 @@ func runConvert(t *hivesim.T, c *client, fixtures *manifest, report *report, pro
 		})
 		report.set("produce_"+name, verdict)
 	}
+	return ""
+}
+
+// runProduceNegatives hands the converter a source with a defect, which it
+// must refuse without printing an artifact. It runs only where the sound
+// source converted, so a refusal is the defect's doing. A shim that cannot
+// apply a defect answers unsupported, which is a capability, not a failure.
+func runProduceNegatives(t *hivesim.T, c *client, fixtures *manifest, report *report, unconverted string) {
+	cases := fixtures.cases("produce")
+	if unconverted != "" {
+		report.set("produce_negatives", unconverted)
+		skipAll(t, c.Type, "produce", len(cases), unconverted+": the sound source did not convert")
+		return
+	}
+	var scored, passed int
+	for _, tc := range cases {
+		t.Run(hivesim.TestSpec{
+			Name:        fmt.Sprintf("%s/%s", c.Type, tc.ID),
+			Description: tc.describe(),
+			Run: func(t *hivesim.T) {
+				info := c.run("convert", append([]string{anchor}, tc.Defect...)...)
+				if info.ExitCode == exitUnsupported {
+					t.Logf("unsupported: %s", strings.TrimSpace(info.Stderr))
+					return
+				}
+				scored++
+				switch {
+				case info.ExitCode == exitAccept:
+					t.Fatalf("converted a source that breaks %s", tc.Clause)
+				case info.ExitCode != exitReject:
+					t.Fatalf("crash: convert exited %d\n%s", info.ExitCode, info.Stderr)
+				case strings.TrimSpace(info.Stderr) == "":
+					t.Fatalf("rejected without saying why")
+				case match(snapshotRE, info.Stdout) != "" || match(preimagesRE, info.Stdout) != "":
+					t.Fatalf("rejected, yet printed an artifact")
+				}
+				passed++
+			},
+		})
+	}
+	if scored == 0 {
+		report.set("produce_negatives", "unsupported")
+		return
+	}
+	report.set("produce_negatives", fmt.Sprintf("%d/%d", passed, scored))
 }
 
 // producerSet collects what each client produced, so the run can judge

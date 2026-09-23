@@ -1201,6 +1201,28 @@
           ]
         }
       }
+    },
+    {
+      "id": "produce/missing-account-preimage",
+      "suite": "produce",
+      "defect": [
+        "drop-preimage",
+        "0x4599828688a5c37132b6fc04e35760b4753ce68708a7b7d4d97b940047557fdb"
+      ],
+      "expect": "reject",
+      "clause": "converter.preimage-set-matches-leaves",
+      "note": "the source has no preimage for account 0x0000000000000000000000000000000000000101"
+    },
+    {
+      "id": "produce/missing-slot-preimage",
+      "suite": "produce",
+      "defect": [
+        "drop-preimage",
+        "0xa66cc928b5edb82af9bd49922954155ab7b0942694bea4ce44661d9a8736c688"
+      ],
+      "expect": "reject",
+      "clause": "converter.preimage-set-matches-leaves",
+      "note": "the source has no preimage for slot 7, held by 0x0000000000000000000000000000000000000505"
     }
   ]
 }

@@ -27,6 +27,7 @@ var columns = []struct{ key, header string }{
 	{"verify_snapshot", "consume snapshot"},
 	{"produce_preimages", "produce preimages"},
 	{"produce_snapshot", "produce snapshot"},
+	{"produce_negatives", "refuse a bad source"},
 }
 
 type suiteFile struct {
