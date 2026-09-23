@@ -39,14 +39,13 @@ a gap, not a failure.
 | verb | arguments | stdout |
 |---|---|---|
 | `genesis-root` | | `mpt_root=0x…` |
-| `verify` | `<snapshot> <preimages> <anchor> [snapshotDigest] [preimageDigest]` | |
+| `verify` | `<snapshot> <preimages> <anchor>` | |
 | `convert` | `<anchor>` | `snapshot=<b64>` and/or `preimages=<b64>` |
 
 Exit `0` accepted, `1` rejected, `3` unsupported, anything else a crash. A
 crash never counts as a rejection, and a shim must not wrap the client in
 `|| exit 1`: it echoes the real status as `client_exit=`. Paths are relative
-to the fixture tar the simulator uploads; the anchor is block 0. The digests
-are passed because a shell has no keccak and some clients want them.
+to the fixture tar the simulator uploads; the anchor is block 0.
 `convert` prints only what the client can produce: a missing line means
 that artifact is unsupported.
 
@@ -54,7 +53,7 @@ A shim may need more than a command line. Nethermind consumes artifacts
 during node startup, so its shim boots a throwaway node and reads the
 outcome off the log, synthesizing a chainspec with a scheduled
 `binaryTrieTime` (fork times placed after genesis, so the genesis hash is
-unchanged) and the `manifest.json` the EIP does not define.
+unchanged).
 
 Each case records in `fixtures/manifest.json` the effect its mutation had on
 the artifact: byte lengths, the first differing offset, whether the file

@@ -1,13 +1,12 @@
 #!/bin/bash
 # Nethermind consumes the artifacts during node startup, so verify boots a
 # throwaway node against them and reads the outcome off its log. Written
-# against NethermindEth/nethermind@pbt-state (f56fb98e); see README.md for
-# the chainspec and manifest it synthesizes.
+# against NethermindEth/nethermind@pbt-state (bf548a39); see README.md for
+# the chainspec it synthesizes.
 set -u
 . /hive-bin/pbt-common.sh
 
 NETHERMIND=/nethermind/nethermind
-ZERO=0x$(printf '%064d' 0)
 verb="${1:-}"; shift || true
 
 # All three after the genesis timestamp, so the genesis header is unchanged
@@ -17,29 +16,16 @@ spec() {
         /genesis.json > /pbt/genesis-pbt.json
 }
 
-manifest() { # snapshot digest, preimage digest
-    local block chain
-    block=$(genesis_block) || return 1
-    chain=$(curl -sf -X POST -H 'Content-Type: application/json' \
-        --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' http://127.0.0.1:8545 | jq -r '.result')
-    jq -n --arg chain "$((chain))" --arg genesis "$(echo "$block" | jq -r .hash)" \
-        --arg root "$(echo "$block" | jq -r .stateRoot)" --arg pbt "$PBT_ROOT" \
-        --arg snap "${1:-$ZERO}" --arg pre "${2:-$ZERO}" \
-        '{version: 1, chainId: $chain, genesisHash: $genesis, anchorHash: $genesis, anchorNumber: 0,
-          anchorMptRoot: $root, pbtRoot: $pbt, snapshotDigest: $snap, preimageDigest: $pre,
-          formatRevision: "eip-8347", producerRevision: "hive-pbt-artifacts", sourceKind: "portable"}' \
-        > /pbt/manifest.json
-}
-
+# The merge plugin refuses to start without an engine port; both ports stay
+# clear of the node hive booted.
 config() { # snapshot path, preimages path
     jq -n --arg snap "$1" --arg pre "$2" '{
         Init: {ChainSpecPath: "/pbt/genesis-pbt.json", BaseDbPath: "/pbt/nm-db", DiscoveryEnabled: false,
-               ProcessingEnabled: false, PeerManagerEnabled: false, SynchronizationEnabled: false},
-        JsonRpc: {Enabled: false},
+               ProcessingEnabled: false, PeerManagerEnabled: false},
+        JsonRpc: {Enabled: true, Host: "127.0.0.1", Port: 18545, EngineHost: "127.0.0.1", EnginePort: 18551},
         Network: {DiscoveryPort: 30399, P2PPort: 30399},
         FlatDb: {Enabled: true, Layout: "Flat", HistoryEnabled: false},
-        Pbt: {Enabled: true, MigrationSnapshotPath: $snap, MigrationPreimagesPath: $pre,
-              MigrationManifestPath: "/pbt/manifest.json"}
+        Pbt: {Enabled: true, MigrationSnapshotPath: $snap, MigrationPreimagesPath: $pre, MigrationAnchor: 0}
     }' > /pbt/config.json
 }
 
@@ -88,8 +74,7 @@ genesis-root)
 
 verify)
     unpack || { echo "cannot unpack the fixtures" >&2; exit 2; }
-    PBT_ROOT="0x$(od -An -tx1 -N32 "$FIXTURES/$1" | tr -d ' \n')"
-    spec && manifest "${4:-}" "${5:-}" && config "$FIXTURES/$1" "$FIXTURES/$2" || { echo "cannot write the node's inputs" >&2; exit 2; }
+    spec && config "$FIXTURES/$1" "$FIXTURES/$2" || { echo "cannot write the node's inputs" >&2; exit 2; }
     boot
     ;;
 

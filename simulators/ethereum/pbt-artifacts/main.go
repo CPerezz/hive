@@ -85,12 +85,6 @@ func (c *client) run(verb string, args ...string) *hivesim.ExecInfo {
 	return info
 }
 
-// verify also passes the artifact digests, which some clients' consumption
-// path requires.
-func (c *client) verify(fixtures *manifest, snapshot, preimages string) *hivesim.ExecInfo {
-	return c.run("verify", snapshot, preimages, anchor, fixtures.digest(snapshot), fixtures.digest(preimages))
-}
-
 func runClient(t *hivesim.T, fixtures *manifest, ct *hivesim.ClientDefinition, producers *producerSet) {
 	shim := shimFor(ct.Name)
 	files := map[string]string{
@@ -156,7 +150,7 @@ func runVerifySuite(t *hivesim.T, c *client, fixtures *manifest, report *report,
 	t.Run(hivesim.TestSpec{
 		Name: fmt.Sprintf("%s/%s/valid", c.Type, suite),
 		Run: func(t *hivesim.T) {
-			info := c.verify(fixtures, fixtures.Valid.Snapshot, fixtures.Valid.Preimages)
+			info := c.run("verify", fixtures.Valid.Snapshot, fixtures.Valid.Preimages, anchor)
 			baseline = info.ExitCode
 			switch info.ExitCode {
 			case exitAccept:
@@ -187,7 +181,7 @@ func runVerifySuite(t *hivesim.T, c *client, fixtures *manifest, report *report,
 			Name:        fmt.Sprintf("%s/%s", c.Type, tc.ID),
 			Description: tc.describe(),
 			Run: func(t *hivesim.T) {
-				info := c.verify(fixtures, tc.Snapshot, tc.Preimages)
+				info := c.run("verify", tc.Snapshot, tc.Preimages, anchor)
 				if tc.Expect == expectUnspecified {
 					t.Logf("unspecified clause %s: exit %d", tc.Clause, info.ExitCode)
 					return

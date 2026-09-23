@@ -179,8 +179,6 @@ func (m *manifest) read(path string) ([]byte, error) {
 	return os.ReadFile(filepath.Join(m.dir, path))
 }
 
-func (m *manifest) digest(path string) string { return m.digests[path] }
-
 func (m *manifest) cases(suite string) []testCase {
 	var out []testCase
 	for _, c := range m.Cases {
