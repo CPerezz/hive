@@ -1,8 +1,9 @@
 #!/bin/bash
 # Nethermind consumes the artifacts during node startup, so verify boots a
-# throwaway node against them and reads the outcome off its log. Written
-# against NethermindEth/nethermind@pbt-state (bf548a39); see README.md for
-# the chainspec it synthesizes.
+# throwaway node against them and reads the outcome off its log; convert
+# boots another that exports both and exits. Written against
+# NethermindEth/nethermind@pbt-state (bf548a39); see README.md for the
+# chainspec it synthesizes.
 set -u
 . /hive-bin/pbt-common.sh
 
@@ -67,6 +68,29 @@ boot() {
     return 2
 }
 
+# export writes both artifacts for block 0 from a throwaway preimage-flat node
+# with $1 export workers, into /pbt/nm-out/export. A scheduled binaryTrieTime
+# requires the Flat layout, so this boot reads /genesis.json unchanged.
+export_artifacts() {
+    rm -rf /pbt/nm-export-db /pbt/nm-out && mkdir -p /pbt/nm-out || return 2
+    jq -n --argjson workers "$1" '{
+        Init: {ChainSpecPath: "/genesis.json", BaseDbPath: "/pbt/nm-export-db", DiscoveryEnabled: false,
+               PeerManagerEnabled: false},
+        JsonRpc: {Enabled: true, Host: "127.0.0.1", Port: 18545, EngineHost: "127.0.0.1", EnginePort: 18551},
+        Network: {DiscoveryPort: 30399, P2PPort: 30399},
+        FlatDb: {Enabled: true, Layout: "PreimageFlat", HistoryEnabled: false},
+        Pbt: {MigrationExportPath: "/pbt/nm-out/export", MigrationAnchor: 0, ExportConcurrency: $workers}
+    }' > /pbt/nm-export.json || return 2
+    timeout 120 "$NETHERMIND" --config /pbt/nm-export.json --log INFO >/pbt/nm-export.log 2>&1
+    local status=$?
+    [ $status -eq 124 ] && status=timeout
+    echo "client_exit=$status"
+    if [ "$status" != 0 ] || [ ! -f /pbt/nm-out/export/snapshot.pbt ] || [ ! -f /pbt/nm-out/export/preimages.bin ]; then
+        tail -20 /pbt/nm-export.log >&2
+        return 2
+    fi
+}
+
 case "$verb" in
 genesis-root)
     genesis_root
@@ -79,9 +103,22 @@ verify)
     ;;
 
 convert)
-    echo "nethermind exports with --Pbt.MigrationExportPath, which needs a genesis bootstrap or an" >&2
-    echo "offline preimage source as input; a container booted from genesis.json alone has neither" >&2
-    exit 3
+    if [ $# -gt 1 ]; then
+        echo "plain-key state: no preimage store to remove from" >&2
+        exit 3
+    fi
+    # The export is parallel, and the bytes must not depend on the workers.
+    export_artifacts 4 || exit 2
+    rm -rf /pbt/nm-four && mv /pbt/nm-out/export /pbt/nm-four || exit 2
+    export_artifacts 1 || exit 2
+    for f in snapshot.pbt preimages.bin; do
+        if ! at=$(cmp /pbt/nm-out/export/$f /pbt/nm-four/$f); then
+            echo "nondeterministic=$f: ${at:-one file is a prefix of the other}" >&2
+            exit 1
+        fi
+    done
+    echo "snapshot=$(b64 /pbt/nm-out/export/snapshot.pbt)"
+    echo "preimages=$(b64 /pbt/nm-out/export/preimages.bin)"
     ;;
 
 *)

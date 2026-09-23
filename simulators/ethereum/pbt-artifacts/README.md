@@ -56,7 +56,9 @@ A shim may need more than a command line. Nethermind consumes artifacts
 during node startup, so its shim boots a throwaway node and reads the
 outcome off the log, synthesizing a chainspec with a scheduled
 `binaryTrieTime` (fork times placed after genesis, so the genesis hash is
-unchanged).
+unchanged). It exports from another throwaway node, on a preimage-flat
+layout and the genesis as given, twice: at four workers and at one, and it
+prints nothing if the bytes differ between the two.
 
 Each case records in `fixtures/manifest.json` the effect its mutation had on
 the artifact: byte lengths, the first differing offset, whether the file
