@@ -103,16 +103,21 @@ answered by EIP-8297's embedding rules and is scored.
 
 The preimage file is derived from the allocation, not taken from a client.
 The snapshot needs a tree, so its bytes come from the reference converter,
-but its leaf set is checked against an independent derivation of the
-embedding rules (values, chunking, presence) before anything is written, and
-`agreement/snapshot` is what turns that into a cross-client claim.
+held to three checks before anything is written: its values, chunking and
+presence against a derivation of the embedding rules that shares only geth's
+key functions; its serialization against the generator's own strict decoder;
+and its root against execution-specs' reference state model. Keys and root
+otherwise rest on geth's `trie/bintrie`, which is why the spec root is a
+gate, recorded under `valid.gates`, and why `agreement/snapshot` is what
+makes the bytes a cross-client claim.
 
-Regenerating needs the go-ethereum PBT fork checked out beside `hive/`. The
-generator ships with its module files disabled so hive's simulator build
-never sees them:
+Regenerating needs the go-ethereum PBT fork checked out beside `hive/`, and
+for the root gate an execution-specs checkout with its `.venv`; without
+`-ref` the gate is recorded as skipped. The generator ships with its module
+files disabled so hive's simulator build never sees them:
 
 ```bash
 cd fixtures/gen && cp go.mod.dist go.mod && cp go.sum.dist go.sum
-go run . -geth /path/to/geth -out ..
-cd .. && ./validate.sh /path/to/geth     # the same judgement, no docker
+go run . -geth /path/to/geth -ref /path/to/execution-specs -out ..
+cd .. && ./validate.sh /path/to/geth /path/to/execution-specs   # the same judgement, no docker
 ```

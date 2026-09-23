@@ -1,8 +1,10 @@
 // Command gen regenerates the checked-in fixtures: the anchor genesis, the
 // valid artifacts from the reference converter, and one file per way an
-// artifact can lie.
+// artifact can lie. -ref names an execution-specs checkout for the root
+// gate; -check re-runs the gates on what is checked in and writes nothing.
 //
-//	go run . -geth /path/to/geth -out ..
+//	go run . -geth /path/to/geth -ref /path/to/execution-specs -out ..
+//	go run . -check [-ref /path/to/execution-specs] -out ..
 package main
 
 import (
@@ -28,17 +30,25 @@ import (
 
 func main() {
 	var (
-		gethBin = flag.String("geth", "geth", "path to a geth binary built from the PBT fork")
-		outDir  = flag.String("out", "..", "fixtures directory to write")
+		gethBin  = flag.String("geth", "geth", "path to a geth binary built from the PBT fork")
+		outDir   = flag.String("out", "..", "fixtures directory to write")
+		ref      = flag.String("ref", "", "execution-specs checkout for the spec-reference root gate")
+		onlyGate = flag.Bool("check", false, "re-run the admission gates on the checked-in pairs, write nothing")
 	)
 	flag.Parse()
 
-	if err := run(*gethBin, *outDir); err != nil {
+	var err error
+	if *onlyGate {
+		err = check(*outDir, *ref)
+	} else {
+		err = run(*gethBin, *outDir, *ref)
+	}
+	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(gethBin, outDir string) error {
+func run(gethBin, outDir, ref string) error {
 	alloc := edgeCaseAlloc()
 	genesisPath := filepath.Join(outDir, "genesis.json")
 	if err := writeGenesis(genesisPath, alloc); err != nil {
@@ -52,6 +62,10 @@ func run(gethBin, outDir string) error {
 	}
 	fmt.Printf("valid artifacts: pbtRoot %x, %d leaves, %d preimage records\n",
 		valid.root, len(valid.leaves), len(valid.records))
+	g, err := admit(valid, genesisPath, ref)
+	if err != nil {
+		return err
+	}
 
 	cases, err := writeCases(outDir, valid)
 	if err != nil {
@@ -61,7 +75,7 @@ func run(gethBin, outDir string) error {
 	if err != nil {
 		return err
 	}
-	return writeManifest(outDir, genesisPath, valid, append(cases, produce...))
+	return writeManifest(outDir, genesisPath, valid, g, append(cases, produce...))
 }
 
 // artifacts is the valid pair, decoded.
@@ -85,7 +99,7 @@ type record struct {
 }
 
 // convert runs the reference converter over the genesis and holds its output
-// to what the allocation implies.
+// to what the allocation implies and to the strict decoder.
 func convert(gethBin, genesisPath, outDir string, alloc types.GenesisAlloc) (*artifacts, error) {
 	datadir, err := os.MkdirTemp("", "pbt-fixtures-")
 	if err != nil {
@@ -117,6 +131,9 @@ func convert(gethBin, genesisPath, outDir string, alloc types.GenesisAlloc) (*ar
 	snapBlob, err := os.ReadFile(snapPath)
 	if err != nil {
 		return nil, err
+	}
+	if err := decodeSnapshotStrict(snapBlob); err != nil {
+		return nil, fmt.Errorf("the converter's snapshot breaks a serialization rule: %w", err)
 	}
 	preBlob, err := os.ReadFile(prePath)
 	if err != nil {
@@ -351,11 +368,12 @@ type manifest struct {
 		PreimageSHA256 string `json:"preimageSha256"`
 		LeafCount      int    `json:"leafCount"`
 		Records        int    `json:"records"`
+		Gates          *gates `json:"gates"`
 	} `json:"valid"`
 	Cases []caseEntry `json:"cases"`
 }
 
-func writeManifest(outDir, genesisPath string, valid *artifacts, cases []caseEntry) error {
+func writeManifest(outDir, genesisPath string, valid *artifacts, g *gates, cases []caseEntry) error {
 	if a, b := duplicateEffect(cases); a != "" {
 		return fmt.Errorf("cases %s and %s record the same effect: they are one mutation written twice", a, b)
 	}
@@ -384,6 +402,7 @@ func writeManifest(outDir, genesisPath string, valid *artifacts, cases []caseEnt
 	m.Valid.PreimageSHA256 = "0x" + hex.EncodeToString(sha256sum(preBlob))
 	m.Valid.LeafCount = len(valid.leaves)
 	m.Valid.Records = len(valid.records)
+	m.Valid.Gates = g
 	m.Cases = cases
 
 	blob, err := json.MarshalIndent(&m, "", "  ")

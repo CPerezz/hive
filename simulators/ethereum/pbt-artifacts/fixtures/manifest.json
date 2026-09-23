@@ -19,7 +19,12 @@
     "snapshotSha256": "0x574bb1800430f75b6a2d1bec76596738ddfd754ac441d427d375717f2ee4e0a0",
     "preimageSha256": "0xe03895c97fd83d62c9526248113d1ba8f02ea3114fd90e6e719ef935f084d5bb",
     "leafCount": 363,
-    "records": 32
+    "records": 32,
+    "gates": {
+      "strictDecoder": "pass",
+      "specRoot": "pass",
+      "specReference": "execution-specs@fd83423a8"
+    }
   },
   "cases": [
     {

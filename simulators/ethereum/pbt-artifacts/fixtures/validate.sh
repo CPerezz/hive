@@ -2,18 +2,27 @@
 # The simulator's judgement, against one geth binary and no docker: the valid
 # pair must verify, every reject case must be refused, and the unspecified
 # cases are reported either way. A producer case must make the converter
-# refuse its source for a missing preimage.
+# refuse its source for a missing preimage. First, the admission gates every
+# canonical pair passed: the strict decoder always, the spec-reference root
+# when an execution-specs checkout is given.
 #
-# Usage: ./validate.sh /path/to/geth
+# Usage: ./validate.sh /path/to/geth [/path/to/execution-specs]
 set -u
 
 geth="${1:-geth}"
+specs="${2:-}"
 here="$(cd "$(dirname "$0")" && pwd)"
 datadir="$(mktemp -d)"
 trap 'rm -rf "$datadir"' EXIT
 
 missing=$(jq -r '[.cases[] | select(.suite != "produce" and .effect == null) | .id] | join(" ")' "$here/manifest.json")
 [ -z "$missing" ] || { echo "FATAL: cases without a recorded effect: $missing"; exit 2; }
+
+(
+    cd "$here/gen" || exit 2
+    [ -f go.mod ] || { cp go.mod.dist go.mod && cp go.sum.dist go.sum; } || exit 2
+    go run . -check -out .. ${specs:+-ref "$specs"}
+) || { echo "FATAL: an admission gate does not hold"; exit 2; }
 
 "$geth" --datadir "$datadir" init "$here/genesis.json" >/dev/null 2>&1 || { echo "FATAL: genesis init failed"; exit 2; }
 

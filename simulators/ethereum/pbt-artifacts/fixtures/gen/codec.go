@@ -99,6 +99,49 @@ func decodeSnapshot(blob []byte) (common.Hash, []leaf, error) {
 	return root, leaves, nil
 }
 
+// decodeSnapshotStrict holds a snapshot to every serialization rule EIP-8347
+// states, none of which the converter's own decoding is trusted with: the
+// header and its count, strictly ascending keys at their zone's fixed length,
+// and values that are canonical non-zero integers. RLP's own canonical sizes
+// and the pair shape are the rlp package's to enforce.
+func decodeSnapshotStrict(blob []byte) error {
+	if len(blob) < snapshotHeaderSize {
+		return fmt.Errorf("%d bytes, shorter than the header", len(blob))
+	}
+	claimed := binary.BigEndian.Uint64(blob[32:snapshotHeaderSize])
+	stream := rlp.NewStream(bytes.NewReader(blob[snapshotHeaderSize:]), uint64(len(blob)))
+	var (
+		prev []byte
+		n    uint64
+	)
+	for ; ; n++ {
+		var rec struct{ Key, Value []byte }
+		if err := stream.Decode(&rec); err == io.EOF {
+			break
+		} else if err != nil {
+			return fmt.Errorf("record %d: %w", n, err)
+		}
+		if len(rec.Key) == 0 || len(rec.Key) != zoneKeyLength[rec.Key[0]] {
+			return fmt.Errorf("record %d: key %x is not at its zone's length", n, rec.Key)
+		}
+		if prev != nil && bytes.Compare(prev, rec.Key) >= 0 {
+			return fmt.Errorf("record %d: key %x does not ascend", n, rec.Key)
+		}
+		if len(rec.Value) == 0 || len(rec.Value) > 32 || rec.Value[0] == 0 {
+			return fmt.Errorf("record %d: value %x is not a canonical non-zero integer", n, rec.Value)
+		}
+		prev = rec.Key
+	}
+	if n != claimed {
+		return fmt.Errorf("header claims %d leaves, the file holds %d", claimed, n)
+	}
+	return nil
+}
+
+// zoneKeyLength is the key length each zone byte fixes; a reserved zone has
+// none.
+var zoneKeyLength = map[byte]int{0x00: 34, 0x01: 34, 0xff: 66}
+
 // decodePreimages parses records until the bytes stop making sense,
 // returning those it read alongside the error that stopped it, so a file
 // malformed on purpose still yields a diffable shape.
