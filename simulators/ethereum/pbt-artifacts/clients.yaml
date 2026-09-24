@@ -3,10 +3,9 @@
 #   ./hive --sim ethereum/pbt-artifacts \
 #          --client-file simulators/ethereum/pbt-artifacts/clients.yaml
 #
-# Only the clients with artifact code are pinned. geth's preimage writer
-# follows the current EIP text on pbt-preimage-format; once
-# CPerezz/go-ethereum#41 merges, that folds into pbt-converted-anchor and this
-# can point back at it.
+# Only the clients with artifact code are pinned. geth's PBT stack, the
+# EIP-8347 preimage writer included (CPerezz/go-ethereum#39-#42), is merged
+# into pbt-delete-source; the pin moves to pbt once the stack lands there.
 #
 # erigon and besu are deliberately unpinned. erigon's preimage export is on
 # stock main-latest, and besu has no offline artifact command on any branch, so
@@ -20,7 +19,7 @@
   dockerfile: git
   build_args:
     github: CPerezz/go-ethereum
-    tag: pbt-preimage-format
+    tag: pbt-delete-source
 
 - client: nethermind
   nametag: pbt
