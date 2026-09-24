@@ -1,17 +1,15 @@
 // Shipped as go.mod.dist rather than go.mod on purpose.
 //
-// This is a developer tool, not a simulator: it regenerates the checked-in
-// fixtures and never ships in the simulator image. It needs a local checkout
-// of the go-ethereum PBT fork, whose trie/bintrie package recomputes PBT
-// roots for the mutations that have to reach past the internal-consistency
-// check. CI has no such checkout, and hive's simulator build walks every
-// go.mod under simulators/, so leaving one here would break a build that has
-// nothing to do with this code.
+// The simulator image compiles the generator inside the go-ethereum checkout
+// it pins, so it needs no module file of its own. A local run needs one,
+// with the replace pointing at a checkout of the PBT fork. hive's simulator
+// build walks every go.mod under simulators/, so leaving one here would break
+// a build that has nothing to do with this code.
 //
-// To regenerate, copy it into place first:
+// To run it locally, copy it into place first:
 //
 //	cp go.mod.dist go.mod && cp go.sum.dist go.sum
-//	go run . -geth /path/to/geth -out ..
+//	go run . -geth /path/to/geth -out /tmp/fixtures
 //
 // The replace path assumes hive and go-ethereum are siblings.
 module github.com/ethereum/hive/simulators/ethereum/pbt-artifacts/fixtures/gen

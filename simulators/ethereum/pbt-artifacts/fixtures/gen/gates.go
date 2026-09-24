@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 // pbtRootPy is the spec reference's root for a genesis; see the script.
@@ -18,35 +18,39 @@ import (
 //go:embed pbt_root.py
 var pbtRootPy string
 
-// gates records the admission checks a canonical pair passed. Neither rests
-// on geth's PBT code: the strict decoder is this generator's own, and the
-// root comes from execution-specs.
-type gates struct {
-	StrictDecoder string `json:"strictDecoder"`
-	SpecRoot      string `json:"specRoot"`
-	SpecReference string `json:"specReference,omitempty"`
-}
+// The canonical pair as admitted: execution-specs computes its root, and
+// nethermind writes the same bytes. The image regenerates it on every build,
+// so a converter or generator change that moves it fails there. To move it
+// on purpose, admit the new pair with validate.sh and an execution-specs
+// checkout, then update both.
+var (
+	pinnedSnapshot  = common.HexToHash("0xf2301b3bf78f12445f102e1761824c4c05a46b9cc5153cc415abef42626258db")
+	pinnedPreimages = common.HexToHash("0xe0af5df37c748df3eb3ba0adb07b138e19ffaeccfd6e2eaf7c46ebaf7dc60d2b")
+)
 
-// admit runs the root gate on a pair convert has already held to the strict
-// decoder. Without a reference checkout the root gate is skipped.
-func admit(valid *artifacts, genesisPath, ref string) (*gates, error) {
-	g := &gates{StrictDecoder: "pass", SpecRoot: "skipped"}
-	if ref == "" {
-		return g, nil
+// admit holds a pair convert has already held to the strict decoder to the
+// spec reference's root, when a checkout is given, and to the pin. Neither
+// rests on geth's PBT code.
+func admit(valid *artifacts, genesisPath, ref string) error {
+	if ref != "" {
+		root, err := specRoot(ref, genesisPath)
+		if err != nil {
+			return err
+		}
+		if root != valid.root {
+			return fmt.Errorf("the spec reference roots the genesis at %x, the converter at %x", root, valid.root)
+		}
 	}
-	root, commit, err := specRoot(ref, genesisPath)
-	if err != nil {
-		return nil, err
+	snap := crypto.Keccak256Hash(mustRead(valid.snapshotFD))
+	pre := crypto.Keccak256Hash(mustRead(valid.preimageFD))
+	if snap != pinnedSnapshot || pre != pinnedPreimages {
+		return fmt.Errorf("the canonical pair moved: snapshot %x, preimages %x; pinned %x, %x", snap, pre, pinnedSnapshot, pinnedPreimages)
 	}
-	if root != valid.root {
-		return nil, fmt.Errorf("%s: the spec reference roots it at %x, the converter at %x", genesisPath, root, valid.root)
-	}
-	g.SpecRoot, g.SpecReference = "pass", "execution-specs@"+commit
-	return g, nil
+	return nil
 }
 
 // specRoot runs pbt_root.py on a genesis with the checkout's own interpreter.
-func specRoot(ref, genesisPath string) (common.Hash, string, error) {
+func specRoot(ref, genesisPath string) (common.Hash, error) {
 	var stderr bytes.Buffer
 	cmd := exec.Command(filepath.Join(ref, ".venv", "bin", "python"), "-", genesisPath)
 	cmd.Env = append(os.Environ(), "PYTHONPATH="+filepath.Join(ref, "src"))
@@ -54,35 +58,7 @@ func specRoot(ref, genesisPath string) (common.Hash, string, error) {
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return common.Hash{}, "", fmt.Errorf("spec reference on %s: %w\n%s", genesisPath, err, stderr.String())
+		return common.Hash{}, fmt.Errorf("spec reference on %s: %w\n%s", genesisPath, err, stderr.String())
 	}
-	commit, err := exec.Command("git", "-C", ref, "rev-parse", "--short=9", "HEAD").Output()
-	if err != nil {
-		return common.Hash{}, "", fmt.Errorf("spec reference commit: %w", err)
-	}
-	return common.HexToHash(strings.TrimSpace(string(out))), strings.TrimSpace(string(commit)), nil
-}
-
-// check re-runs the gates on the checked-in canonical pair and writes
-// nothing; fixtures/validate.sh calls it.
-func check(outDir, ref string) error {
-	var m manifest
-	if err := json.Unmarshal(mustRead(filepath.Join(outDir, "manifest.json")), &m); err != nil {
-		return fmt.Errorf("manifest.json: %w", err)
-	}
-	snap := mustRead(filepath.Join(outDir, m.Valid.Snapshot))
-	if err := decodeSnapshotStrict(snap); err != nil {
-		return fmt.Errorf("%s: %w", m.Valid.Snapshot, err)
-	}
-	if ref != "" {
-		root, _, err := specRoot(ref, filepath.Join(outDir, m.Genesis.File))
-		if err != nil {
-			return err
-		}
-		if claimed := common.BytesToHash(snap[:32]); root != claimed {
-			return fmt.Errorf("the spec reference roots the fixture at %x, the snapshot claims %x", root, claimed)
-		}
-	}
-	fmt.Println("gates hold")
-	return nil
+	return common.HexToHash(strings.TrimSpace(string(out))), nil
 }

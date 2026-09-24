@@ -1,10 +1,9 @@
-// Command gen regenerates the checked-in fixtures: the anchor genesis, the
-// valid artifacts from the reference converter, and one file per way an
-// artifact can lie. -ref names an execution-specs checkout for the root
-// gate; -check re-runs the gates on what is checked in and writes nothing.
+// Command gen writes the fixture set: the anchor genesis, the valid
+// artifacts from the reference converter, and one file per way an artifact
+// can lie. The simulator image runs it when it builds. -ref names an
+// execution-specs checkout for the root gate, which only a local run has.
 //
-//	go run . -geth /path/to/geth -ref /path/to/execution-specs -out ..
-//	go run . -check [-ref /path/to/execution-specs] -out ..
+//	go run . -geth /path/to/geth [-ref /path/to/execution-specs] -out /tmp/fixtures
 package main
 
 import (
@@ -30,20 +29,13 @@ import (
 
 func main() {
 	var (
-		gethBin  = flag.String("geth", "geth", "path to a geth binary built from the PBT fork")
-		outDir   = flag.String("out", "..", "fixtures directory to write")
-		ref      = flag.String("ref", "", "execution-specs checkout for the spec-reference root gate")
-		onlyGate = flag.Bool("check", false, "re-run the admission gates on the checked-in pairs, write nothing")
+		gethBin = flag.String("geth", "geth", "path to a geth binary built from the PBT fork")
+		outDir  = flag.String("out", "..", "fixtures directory to write")
+		ref     = flag.String("ref", "", "execution-specs checkout for the spec-reference root gate")
 	)
 	flag.Parse()
 
-	var err error
-	if *onlyGate {
-		err = check(*outDir, *ref)
-	} else {
-		err = run(*gethBin, *outDir, *ref)
-	}
-	if err != nil {
+	if err := run(*gethBin, *outDir, *ref); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -62,8 +54,7 @@ func run(gethBin, outDir, ref string) error {
 	}
 	fmt.Printf("valid artifacts: pbtRoot %x, %d leaves, %d preimage records\n",
 		valid.root, len(valid.leaves), len(valid.records))
-	g, err := admit(valid, genesisPath, ref)
-	if err != nil {
+	if err := admit(valid, genesisPath, ref); err != nil {
 		return err
 	}
 
@@ -75,7 +66,7 @@ func run(gethBin, outDir, ref string) error {
 	if err != nil {
 		return err
 	}
-	return writeManifest(outDir, genesisPath, valid, g, append(cases, produce...))
+	return writeManifest(outDir, genesisPath, valid, append(cases, produce...))
 }
 
 // artifacts is the valid pair, decoded.
@@ -368,12 +359,11 @@ type manifest struct {
 		PreimageSHA256 string `json:"preimageSha256"`
 		LeafCount      int    `json:"leafCount"`
 		Records        int    `json:"records"`
-		Gates          *gates `json:"gates"`
 	} `json:"valid"`
 	Cases []caseEntry `json:"cases"`
 }
 
-func writeManifest(outDir, genesisPath string, valid *artifacts, g *gates, cases []caseEntry) error {
+func writeManifest(outDir, genesisPath string, valid *artifacts, cases []caseEntry) error {
 	if a, b := duplicateEffect(cases); a != "" {
 		return fmt.Errorf("cases %s and %s record the same effect: they are one mutation written twice", a, b)
 	}
@@ -402,7 +392,6 @@ func writeManifest(outDir, genesisPath string, valid *artifacts, g *gates, cases
 	m.Valid.PreimageSHA256 = "0x" + hex.EncodeToString(sha256sum(preBlob))
 	m.Valid.LeafCount = len(valid.leaves)
 	m.Valid.Records = len(valid.records)
-	m.Valid.Gates = g
 	m.Cases = cases
 
 	blob, err := json.MarshalIndent(&m, "", "  ")

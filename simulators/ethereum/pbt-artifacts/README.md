@@ -61,9 +61,9 @@ unchanged). It exports from another throwaway node, on a preimage-flat
 layout and the genesis as given, twice: at four workers and at one, and it
 prints nothing if the bytes differ between the two.
 
-Each case records in `fixtures/manifest.json` the effect its mutation had on
-the artifact: byte lengths, the first differing offset, whether the file
-still parses, and the leaf keys or record addresses it added, removed,
+Each case records in the generated `manifest.json` the effect its mutation
+had on the artifact: byte lengths, the first differing offset, whether the
+file still parses, and the leaf keys or record addresses it added, removed,
 changed or reordered. The generator computes it from the bytes it wrote, the
 simulator refuses a set where two cases record the same effect, and every
 test carries it in its description. The simulator matches nothing against
@@ -87,40 +87,45 @@ crash.
 
 ## Fixtures
 
-`fixtures/genesis.json`: one account per embedding rule. Code sizes around
-the 31-byte chunk, PUSH32 and PUSH2 straddling a chunk, PUSHDATA running
-past the code's end (leading count at the 31 cap), a zero chunk that must be
-absent and a trailing one, code entirely zero, code spanning two code
-groups, shared bytecode, code that merely starts with `0xef0100` at 23 and
-24 bytes, delegations to a shared target, a distinct one, a missing account,
-an EOA and another delegation, storage either side of the header split and
-across groups, an account with only overflow storage, a contract with zero
-balance and nonce, maximum nonce and balance. The 24 KiB maximum is left
-out: 793 leaves for nothing the two-group case does not cover. The produce
-leg is measured on this sound state only.
+Nothing under `fixtures/` is checked in but the generator. The simulator
+image builds geth at a pinned commit (`geth_commit` in the Dockerfile) and
+runs `fixtures/gen`, which writes the anchor genesis, the valid pair and one
+file per case.
 
-`fixtures/manifest.json` names every case, its clause and expected outcome.
-One case is `unspecified`: `snapshot/empty`, since whether a zero-account
-state is convertible at all is not settled. Every other question is
-answered by EIP-8297's embedding rules and is scored.
+The genesis has one account per embedding rule. Code sizes around the
+31-byte chunk, PUSH32 and PUSH2 straddling a chunk, PUSHDATA running past the
+code's end (leading count at the 31 cap), a zero chunk that must be absent and
+a trailing one, code entirely zero, code spanning two code groups, shared
+bytecode, code that merely starts with `0xef0100` at 23 and 24 bytes,
+delegations to a shared target, a distinct one, a missing account, an EOA and
+another delegation, storage either side of the header split and across
+groups, an account with only overflow storage, a contract with zero balance
+and nonce, maximum nonce and balance. The 24 KiB maximum is left out: 793
+leaves for nothing the two-group case does not cover. The produce leg is
+measured on this sound state only.
+
+The manifest names every case, its clause and expected outcome. One case is
+`unspecified`: `snapshot/empty`, since whether a zero-account state is
+convertible at all is not settled. Every other question is answered by
+EIP-8297's embedding rules and is scored.
 
 The preimage file is derived from the allocation, not taken from a client.
 The snapshot needs a tree, so its bytes come from the reference converter,
-held to three checks before anything is written: its values, chunking and
+held to three checks before any case is cut from it: its values, chunking and
 presence against a derivation of the embedding rules that shares only geth's
 key functions; its serialization against the generator's own strict decoder;
-and its root against execution-specs' reference state model. Keys and root
-otherwise rest on geth's `trie/bintrie`, which is why the spec root is a
-gate, recorded under `valid.gates`, and why `agreement/snapshot` is what
-makes the bytes a cross-client claim.
+and both files' digests against the pair admitted when the fixtures were
+designed, whose root execution-specs' reference state model computes too. Keys
+and root otherwise rest on geth's `trie/bintrie`, which is why the pair is
+pinned and why `agreement/snapshot` is what makes the bytes a cross-client
+claim. A converter that writes different bytes fails the image build.
 
-Regenerating needs the go-ethereum PBT fork checked out beside `hive/`, and
-for the root gate an execution-specs checkout with its `.venv`; without
-`-ref` the gate is recorded as skipped. The generator ships with its module
-files disabled so hive's simulator build never sees them:
+To look at the fixtures or to admit a changed pair, run the generator
+locally. It needs the go-ethereum PBT fork checked out beside `hive/`, and
+for the root gate an execution-specs checkout with its `.venv`:
 
 ```bash
 cd fixtures/gen && cp go.mod.dist go.mod && cp go.sum.dist go.sum
-go run . -geth /path/to/geth -ref /path/to/execution-specs -out ..
+go run . -geth /path/to/geth -ref /path/to/execution-specs -out /tmp/fixtures
 cd .. && ./validate.sh /path/to/geth /path/to/execution-specs   # the same judgement, no docker
 ```
