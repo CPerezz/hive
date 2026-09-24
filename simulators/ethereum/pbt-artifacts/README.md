@@ -16,7 +16,8 @@ The live migration (BAL replay, shadow roots, the fork switch) belongs to
 ./hive --sim ethereum/pbt-artifacts \
        --client-file simulators/ethereum/pbt-artifacts/clients.yaml
 
-go run ./simulators/ethereum/pbt-artifacts/tools/matrix workspace/logs > CAPABILITY.md
+# the simulator is its own module, so run the tool from it
+go -C simulators/ethereum/pbt-artifacts run ./tools/matrix "$PWD/workspace/logs" > CAPABILITY.md
 ```
 
 `clients.yaml` pins each client to the branch carrying its PBT work. To

@@ -2,7 +2,7 @@
 // directory: one row per client, one column per verb, plus the clients that
 // have no PBT work at all and therefore never ran.
 //
-//	go run ./tools/matrix workspace/logs > CAPABILITY.md
+//	go -C simulators/ethereum/pbt-artifacts run ./tools/matrix "$PWD/workspace/logs" > CAPABILITY.md
 package main
 
 import (
