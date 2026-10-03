@@ -1,6 +1,4 @@
 #!/bin/bash
-# Erigon exports both artifacts and consumes neither: its import-pbt is an
-# integration-tool path into a stopped node, not a check of an external pair.
 set -u
 . /hive-bin/pbt-common.sh
 
@@ -13,8 +11,16 @@ genesis-root)
     ;;
 
 verify)
-    echo "erigon has no importer for an externally produced snapshot or preimage file" >&2
-    exit 3
+    unpack || { echo "cannot unpack the fixtures" >&2; exit 2; }
+    [ -f "$FIXTURES/$1" ] && [ -f "$FIXTURES/$2" ] || { echo "fixture file missing" >&2; exit 2; }
+    out=$("$ERIGON" snapshots verify-pbt --datadir=/erigon-hive-datadir --snapshot="$FIXTURES/$1" --preimages="$FIXTURES/$2" --block="$3" 2>&1)
+    status=$?
+    echo "client_exit=$status"
+    case $status in
+    0) exit 0 ;;
+    1) echo "$out" >&2; exit 1 ;;
+    *) echo "$out" >&2; exit 2 ;;
+    esac
     ;;
 
 convert)
